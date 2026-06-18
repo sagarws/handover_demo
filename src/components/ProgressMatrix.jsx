@@ -6,56 +6,58 @@ const LEGEND = [
   { key: "done", label: "Done", className: "bg-emerald-500" },
   { key: "active", label: "Active (partial)", className: "bg-brand-500" },
   { key: "todo", label: "Not started", className: "bg-slate-200" },
-  { key: "na", label: "N/A for this unit", className: "bg-slate-50 ring-1 ring-slate-200" },
 ];
 
 export function ProgressMatrix() {
-  const { sites, stages, stageTradeMap, trades, flatProgress } = useApp();
+  const { sites, categories, flatProgress } = useApp();
   const [siteId, setSiteId] = useState(sites[0]?.id ?? "");
-
   const site = sites.find((s) => s.id === siteId);
-  const tradeName = (id) => trades.find((t) => t.id === id)?.name ?? "—";
 
-  // Group units by type so we render a separate matrix per type
-  // (Flats / Corridors / Staircases / …). Each group's progress reads
-  // independently.
-  const groupedUnits = useMemo(() => {
+  // Group this site's units by their category. Each group renders its own
+  // matrix using that category's own stage list — flats, corridors and
+  // staircases each progress along their own track.
+  const groups = useMemo(() => {
     if (!site) return [];
-    const m = new Map();
+    const byCat = new Map();
     site.units.forEach((u) => {
-      const k = u.type || "Other";
-      if (!m.has(k)) m.set(k, []);
-      m.get(k).push(u);
+      if (!byCat.has(u.categoryId)) byCat.set(u.categoryId, []);
+      byCat.get(u.categoryId).push(u);
     });
-    return [...m.entries()];
-  }, [site]);
+    return [...byCat.entries()]
+      .map(([catId, units]) => ({
+        category: categories.find((c) => c.id === catId),
+        units,
+      }))
+      .filter((g) => g.category);
+  }, [site, categories]);
 
-  // Roll up progress over only the stages each unit actually goes through.
-  // Total = sum of |unit.stageIds|, not units × global stages — otherwise
-  // the percentage would be unfairly diluted by N/A cells.
+  // Total / done is summed per category (each category has its own stages
+  // count), with partial credit for the active stage.
   const stats = useMemo(() => {
     if (!site) return null;
     let total = 0;
     let done = 0;
     let active = 0;
-    site.units.forEach((f) => {
-      const p = flatProgress[f.id];
-      if (!p) return;
-      const allowed = new Set(f.stageIds ?? []);
-      const ordered = stages.filter((s) => allowed.has(s.id));
-      total += ordered.length;
-      done += Math.min(p.activeStageIdx, ordered.length);
-      const activeStage = ordered[p.activeStageIdx];
-      if (activeStage) {
-        const required = stageTradeMap[activeStage.id] ?? [];
-        const subs = p.stageSubmissions?.[activeStage.id] ?? {};
-        const slots = required.length || 1;
-        const filled = required.length > 0
-          ? required.filter((t) => subs[t]).length
-          : Object.keys(subs).length;
-        done += filled / slots;
-        active += 1;
-      }
+    groups.forEach(({ category, units }) => {
+      const stages = category.stages;
+      units.forEach((f) => {
+        const p = flatProgress[f.id];
+        if (!p) return;
+        total += stages.length;
+        done += Math.min(p.activeStageIdx, stages.length);
+        const activeStage = stages[p.activeStageIdx];
+        if (activeStage) {
+          const required = category.stageTradeMap[activeStage.id] ?? [];
+          const subs = p.stageSubmissions?.[activeStage.id] ?? {};
+          const slots = required.length || 1;
+          const filled =
+            required.length > 0
+              ? required.filter((t) => subs[t]).length
+              : Object.keys(subs).length;
+          done += filled / slots;
+          active += 1;
+        }
+      });
     });
     return {
       total,
@@ -63,13 +65,13 @@ export function ProgressMatrix() {
       active,
       pct: total ? Math.round((done / total) * 100) : 0,
     };
-  }, [site, stages, stageTradeMap, flatProgress]);
+  }, [site, groups, flatProgress]);
 
   return (
     <div className="space-y-5">
       <PageHeader
         title="Progress Matrix"
-        description="One row per unit, one column per stage. Units are grouped by type (flats / corridors / staircases / …) so each part of the site progresses independently. The active cell fills one notch per trade submitted and only flips fully green when every linked trade has been handed over."
+        description="One matrix per unit category. Columns are the stages defined in that category; the active cell fills one notch per trade submitted and only flips fully green once every linked trade has been handed over."
       />
 
       <Card
@@ -78,7 +80,7 @@ export function ProgressMatrix() {
           stats && (
             <span className="text-[11px] text-slate-500">
               {stats.done}/{stats.total} cells done · {stats.pct}% ·{" "}
-              {stats.active} flats still in progress
+              {stats.active} units still in progress
             </span>
           )
         }
@@ -100,13 +102,11 @@ export function ProgressMatrix() {
         <Card title="Matrix">
           <EmptyHint>Pick a site above.</EmptyHint>
         </Card>
-      ) : site.units.length === 0 ? (
+      ) : groups.length === 0 ? (
         <Card title="Matrix">
-          <EmptyHint>This site has no units yet — add flats, corridors, etc. in Sites.</EmptyHint>
-        </Card>
-      ) : stages.length === 0 ? (
-        <Card title="Matrix">
-          <EmptyHint>No stages defined — add some in Configuration.</EmptyHint>
+          <EmptyHint>
+            This site has no units yet — add some on the Sites page.
+          </EmptyHint>
         </Card>
       ) : (
         <>
@@ -120,122 +120,13 @@ export function ProgressMatrix() {
               ))}
             </div>
           </Card>
-          {groupedUnits.map(([type, units]) => (
-            <Card
-              key={type}
-              title={`${type} (${units.length})`}
-              right={
-                <span className="text-[11px] text-slate-400">
-                  Each row is one {type.toLowerCase()} · independent progress
-                </span>
-              }
-            >
-              <div className="scroll-x overflow-x-auto">
-                <table className="w-full min-w-[720px] border-separate border-spacing-0 text-xs">
-                  <thead>
-                    <tr>
-                      <th className="sticky left-0 z-10 bg-white px-2 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                        {type}
-                      </th>
-                      {stages.map((s, i) => {
-                        const ids = stageTradeMap[s.id] ?? [];
-                        return (
-                          <th
-                            key={s.id}
-                            className="min-w-[110px] border-b border-slate-100 px-2 py-2 align-top"
-                          >
-                            <div className="flex flex-col items-center gap-1 text-center">
-                              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 text-[10px] font-semibold text-slate-500">
-                                {i + 1}
-                              </span>
-                              <span className="text-[11px] font-semibold leading-tight text-ink">
-                                {s.name}
-                              </span>
-                              {ids.length > 0 && (
-                                <div className="flex flex-wrap justify-center gap-1">
-                                  {ids.map((tid) => (
-                                    <span
-                                      key={tid}
-                                      className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600"
-                                    >
-                                      {tradeName(tid)}
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          </th>
-                        );
-                      })}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {units.map((f) => {
-                      const p = flatProgress[f.id] ?? {
-                        activeStageIdx: 0,
-                        stageSubmissions: {},
-                      };
-                      // Map global stage id → unit-local index. Missing
-                      // entries identify the N/A cells.
-                      const allowed = new Set(f.stageIds ?? []);
-                      const unitOrder = stages.filter((s) => allowed.has(s.id));
-                      const localIdxByStage = {};
-                      unitOrder.forEach((s, i) => {
-                        localIdxByStage[s.id] = i;
-                      });
-                      const finished =
-                        unitOrder.length > 0 &&
-                        p.activeStageIdx >= unitOrder.length;
-                      return (
-                        <tr key={f.id} className="hover:bg-slate-50">
-                          <td className="sticky left-0 z-10 bg-white px-2 py-2 text-xs font-semibold text-ink">
-                            <div className="flex items-center gap-2">
-                              <span>{f.name}</span>
-                              <span className="text-[10px] font-normal text-slate-400">
-                                {unitOrder.length}/{stages.length} stages
-                              </span>
-                            </div>
-                            {finished && (
-                              <Pill tone="green" className="mt-1">
-                                completed
-                              </Pill>
-                            )}
-                          </td>
-                          {stages.map((s) => {
-                            const localIdx = localIdxByStage[s.id];
-                            const isApplicable = localIdx !== undefined;
-                            return (
-                              <td
-                                key={s.id}
-                                className="border-b border-slate-50 p-1 text-center"
-                              >
-                                {isApplicable ? (
-                                  <Cell
-                                    flatProgress={p}
-                                    stage={s}
-                                    stageIdx={localIdx}
-                                    stageTradeMap={stageTradeMap}
-                                    tradeName={tradeName}
-                                    flatName={f.name}
-                                  />
-                                ) : (
-                                  <div
-                                    className="mx-auto flex h-6 w-10 items-center justify-center rounded-md bg-slate-50 text-[10px] text-slate-300 ring-1 ring-slate-200"
-                                    title={`${f.name} — ${s.name}: N/A for this unit`}
-                                  >
-                                    —
-                                  </div>
-                                )}
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
+          {groups.map(({ category, units }) => (
+            <CategoryMatrix
+              key={category.id}
+              category={category}
+              units={units}
+              flatProgress={flatProgress}
+            />
           ))}
         </>
       )}
@@ -243,17 +134,115 @@ export function ProgressMatrix() {
   );
 }
 
-// Renders one matrix cell. Done = full emerald. Future = grey. Active stage
-// uses a horizontal split — N equal slots, one per linked trade, each slot
-// goes emerald the moment its trade has submitted. That visualises the
-// "stage percentage divided by number of categories" rule directly.
-function Cell({ flatProgress, stage, stageIdx, stageTradeMap, tradeName, flatName }) {
+function CategoryMatrix({ category, units, flatProgress }) {
+  const stages = category.stages;
+  const tradeName = (id) =>
+    category.trades.find((t) => t.id === id)?.name ?? "—";
+
+  return (
+    <Card
+      title={`${category.name} (${units.length})`}
+      right={
+        <span className="text-[11px] text-slate-400">
+          {stages.length} stages · independent progress per row
+        </span>
+      }
+    >
+      {stages.length === 0 ? (
+        <EmptyHint>
+          “{category.name}” has no stages — define some in Configuration.
+        </EmptyHint>
+      ) : (
+        <div className="scroll-x overflow-x-auto">
+          <table className="w-full min-w-[640px] border-separate border-spacing-0 text-xs">
+            <thead>
+              <tr>
+                <th className="sticky left-0 z-10 bg-white px-2 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  {category.name}
+                </th>
+                {stages.map((s, i) => {
+                  const ids = category.stageTradeMap[s.id] ?? [];
+                  return (
+                    <th
+                      key={s.id}
+                      className="min-w-[110px] border-b border-slate-100 px-2 py-2 align-top"
+                    >
+                      <div className="flex flex-col items-center gap-1 text-center">
+                        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 text-[10px] font-semibold text-slate-500">
+                          {i + 1}
+                        </span>
+                        <span className="text-[11px] font-semibold leading-tight text-ink">
+                          {s.name}
+                        </span>
+                        {ids.length > 0 && (
+                          <div className="flex flex-wrap justify-center gap-1">
+                            {ids.map((tid) => (
+                              <span
+                                key={tid}
+                                className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600"
+                              >
+                                {tradeName(tid)}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {units.map((u) => {
+                const p = flatProgress[u.id] ?? {
+                  activeStageIdx: 0,
+                  stageSubmissions: {},
+                };
+                const finished = p.activeStageIdx >= stages.length;
+                return (
+                  <tr key={u.id} className="hover:bg-slate-50">
+                    <td className="sticky left-0 z-10 bg-white px-2 py-2 text-xs font-semibold text-ink">
+                      {u.name}
+                      {finished && (
+                        <Pill tone="green" className="ml-2">
+                          completed
+                        </Pill>
+                      )}
+                    </td>
+                    {stages.map((s, i) => (
+                      <td
+                        key={s.id}
+                        className="border-b border-slate-50 p-1 text-center"
+                      >
+                        <Cell
+                          flatProgress={p}
+                          stage={s}
+                          stageIdx={i}
+                          category={category}
+                          unitName={u.name}
+                        />
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// One matrix cell. Done = full emerald; future = grey; active = split into
+// equal slots, one per linked trade, so partial completion is visible.
+function Cell({ flatProgress, stage, stageIdx, category, unitName }) {
   const activeIdx = flatProgress.activeStageIdx ?? 0;
   if (stageIdx < activeIdx) {
     return (
       <div
         className="mx-auto h-6 w-10 rounded-md bg-emerald-500"
-        title={`${flatName} — ${stage.name}: done`}
+        title={`${unitName} — ${stage.name}: done`}
       />
     );
   }
@@ -261,26 +250,22 @@ function Cell({ flatProgress, stage, stageIdx, stageTradeMap, tradeName, flatNam
     return (
       <div
         className="mx-auto h-6 w-10 rounded-md bg-slate-200"
-        title={`${flatName} — ${stage.name}: not started`}
+        title={`${unitName} — ${stage.name}: not started`}
       />
     );
   }
-  // Active cell — partial fill, one slot per linked trade.
-  const required = stageTradeMap[stage.id] ?? [];
+  const required = category.stageTradeMap[stage.id] ?? [];
   const subs = flatProgress.stageSubmissions?.[stage.id] ?? {};
-  const slots = required.length > 0
-    ? required.map((tid) => ({
-        tid,
-        filled: Boolean(subs[tid]),
-        label: tradeName(tid),
-      }))
-    : [{ tid: "_", filled: false, label: "—" }];
+  const slots =
+    required.length > 0
+      ? required.map((tid) => ({ tid, filled: Boolean(subs[tid]) }))
+      : [{ tid: "_", filled: false }];
   const filledCount = slots.filter((s) => s.filled).length;
   const pct = Math.round((filledCount / slots.length) * 100);
   return (
     <div
       className="mx-auto flex h-6 w-10 overflow-hidden rounded-md ring-2 ring-brand-500/40"
-      title={`${flatName} — ${stage.name}: ${pct}% (${filledCount}/${slots.length})`}
+      title={`${unitName} — ${stage.name}: ${pct}% (${filledCount}/${slots.length})`}
     >
       {slots.map((slot, i) => (
         <div

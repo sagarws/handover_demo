@@ -1,12 +1,24 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useApp } from "../store.jsx";
 import { Card, Button, Input, Pill, EmptyHint, PageHeader } from "./ui.jsx";
 
 export function Contractors() {
-  const { contractors, trades, addContractor, removeContractor } = useApp();
+  const { contractors, categories, addContractor, removeContractor } = useApp();
   const [name, setName] = useState("");
   const [company, setCompany] = useState("");
   const [tradeIds, setTradeIds] = useState([]);
+
+  // Trades live per-category now — pre-compute a flat lookup so we can
+  // resolve a tradeId back to its display name + owning category.
+  const tradeIndex = useMemo(() => {
+    const m = new Map();
+    categories.forEach((cat) =>
+      cat.trades.forEach((t) =>
+        m.set(t.id, { trade: t, category: cat }),
+      ),
+    );
+    return m;
+  }, [categories]);
 
   const toggleTrade = (id) => {
     setTradeIds((curr) =>
@@ -16,13 +28,11 @@ export function Contractors() {
 
   const canSave = name.trim().length > 0 && tradeIds.length > 0;
 
-  const tradeName = (id) => trades.find((t) => t.id === id)?.name ?? "—";
-
   return (
     <div className="space-y-5">
       <PageHeader
         title="Contractors"
-        description="Create a contractor and tag them with the trades they perform. (No invite link — local-only for the demo.)"
+        description="Create a contractor and tag them with the trades they perform — one tick per category they work in. The handover dropdown then filters by the active stage's required trades."
       />
 
       <Card title="Add contractor">
@@ -50,29 +60,44 @@ export function Contractors() {
         </div>
         <div className="mt-4">
           <div className="mb-2 text-[11px] font-medium text-slate-500">
-            Trades performed
+            Trades performed (grouped by unit category)
           </div>
-          {trades.length === 0 ? (
-            <EmptyHint>No trades defined yet — add some in Configuration.</EmptyHint>
+          {categories.length === 0 ? (
+            <EmptyHint>
+              No categories yet — add one in Configuration.
+            </EmptyHint>
           ) : (
-            <div className="flex flex-wrap gap-2">
-              {trades.map((t) => {
-                const on = tradeIds.includes(t.id);
-                return (
-                  <button
-                    key={t.id}
-                    onClick={() => toggleTrade(t.id)}
-                    className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-                      on
-                        ? "border-brand-500 bg-brand-50 text-brand-700"
-                        : "border-slate-200 bg-white text-slate-600 hover:border-brand-300"
-                    }`}
-                  >
-                    {on ? "✓ " : ""}
-                    {t.name}
-                  </button>
-                );
-              })}
+            <div className="space-y-3">
+              {categories.map((cat) => (
+                <div key={cat.id}>
+                  <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                    {cat.name}
+                  </div>
+                  {cat.trades.length === 0 ? (
+                    <p className="text-[11px] text-slate-400">No trades in this category.</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {cat.trades.map((t) => {
+                        const on = tradeIds.includes(t.id);
+                        return (
+                          <button
+                            key={t.id}
+                            onClick={() => toggleTrade(t.id)}
+                            className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                              on
+                                ? "border-brand-500 bg-brand-50 text-brand-700"
+                                : "border-slate-200 bg-white text-slate-600 hover:border-brand-300"
+                            }`}
+                          >
+                            {on ? "✓ " : ""}
+                            {t.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -101,7 +126,7 @@ export function Contractors() {
                 <tr className="border-b border-slate-100">
                   <th className="px-2 py-2">Name</th>
                   <th className="px-2 py-2">Company</th>
-                  <th className="px-2 py-2">Trades</th>
+                  <th className="px-2 py-2">Trades · category</th>
                   <th className="px-2 py-2"></th>
                 </tr>
               </thead>
@@ -115,11 +140,17 @@ export function Contractors() {
                         {c.tradeIds.length === 0 ? (
                           <Pill tone="rose">no trade</Pill>
                         ) : (
-                          c.tradeIds.map((id) => (
-                            <Pill key={id} tone="blue">
-                              {tradeName(id)}
-                            </Pill>
-                          ))
+                          c.tradeIds.map((id) => {
+                            const entry = tradeIndex.get(id);
+                            return (
+                              <Pill key={id} tone="blue">
+                                {entry?.trade.name ?? "—"}
+                                <span className="ml-1 text-[10px] text-brand-500/70">
+                                  · {entry?.category.name ?? "?"}
+                                </span>
+                              </Pill>
+                            );
+                          })
                         )}
                       </div>
                     </td>

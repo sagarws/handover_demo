@@ -1,79 +1,135 @@
 // Seed data for the handover prototype. All state lives in React state at
 // runtime — this file just gives us a sensible starting point.
+//
+// Domain shape (post-restructure):
+//   categories[]   — Flat / Corridor / Staircase / … each owns its own
+//                    trades, stages, and stage→trade map.
+//   contractors[]  — carry trade ids from any category they can work in.
+//   sites[]        — each site has units; a unit just references a categoryId.
+//   flatProgress   — keyed by unit id; tracks active stage idx + per-trade
+//                    submissions, exactly as before.
 
 let counter = 0;
-export const uid = (prefix = "id") => `${prefix}_${++counter}_${Date.now().toString(36)}`;
+export const uid = (prefix = "id") =>
+  `${prefix}_${++counter}_${Date.now().toString(36)}`;
 
 const trade = (name) => ({ id: uid("trd"), name });
 const stage = (name) => ({ id: uid("stg"), name });
 
-export const initialTrades = [
-  trade("Drylining"),
-  trade("M&E (First Fix)"),
-  trade("Plastering"),
-  trade("Carpentry (Second Fix)"),
-  trade("Painting & Decoration"),
-];
-
-export const initialStages = [
-  stage("Drylining 1st Side"),
-  stage("First Fix M&E"),
-  stage("Plastering"),
-  stage("Second Fix Carpentry"),
-  stage("Decoration Final"),
-];
-
-// stageTradeMap: { [stageId]: tradeId[] }  — many-to-many; a stage can
-// accept work from contractors of any listed trade.
-export const initialStageTradeMap = (() => {
-  const m = {};
-  initialStages.forEach((s, i) => {
-    const primary = initialTrades[i]?.id;
-    m[s.id] = primary ? [primary] : [];
+// Build a category with its own trades/stages and a stage→trade mapping
+// expressed as { stageIdx: [tradeIdx, …] } so the seed is readable.
+const buildCategory = (name, tradeNames, stageNames, mapping = {}) => {
+  const trades = tradeNames.map(trade);
+  const stages = stageNames.map(stage);
+  const stageTradeMap = {};
+  stages.forEach((s, i) => {
+    const tids = (mapping[i] ?? [])
+      .map((tIdx) => trades[tIdx]?.id)
+      .filter(Boolean);
+    stageTradeMap[s.id] = tids;
   });
-  // Seed one stage with two trades so the multi-trade case shows up out of
-  // the box — "First Fix M&E" can be handed over by either M&E or Drylining.
-  const firstFix = initialStages[1];
-  if (firstFix && initialTrades[0] && !m[firstFix.id].includes(initialTrades[0].id)) {
-    m[firstFix.id] = [...m[firstFix.id], initialTrades[0].id];
-  }
-  return m;
-})();
+  return { id: uid("cat"), name, trades, stages, stageTradeMap };
+};
+
+export const initialCategories = [
+  buildCategory(
+    "Flat",
+    [
+      "Drylining",
+      "M&E (First Fix)",
+      "Plastering",
+      "Carpentry (Second Fix)",
+      "Painting & Decoration",
+    ],
+    [
+      "Drylining 1st Side",
+      "First Fix M&E",
+      "Plastering",
+      "Second Fix Carpentry",
+      "Decoration Final",
+    ],
+    {
+      0: [0],
+      1: [1, 0], // multi-trade example: M&E + Drylining together
+      2: [2],
+      3: [3],
+      4: [4],
+    },
+  ),
+  buildCategory(
+    "Corridor",
+    ["Drylining", "M&E", "Plastering", "Painting"],
+    ["Drylining", "First Fix M&E", "Plastering", "Decoration"],
+    { 0: [0], 1: [1], 2: [2], 3: [3] },
+  ),
+  buildCategory(
+    "Staircase",
+    ["Drylining", "Plastering", "Painting"],
+    ["Drylining", "Plastering", "Decoration"],
+    { 0: [0], 1: [1], 2: [2] },
+  ),
+];
+
+// Look up a per-category trade id by category name + trade name (seed-only
+// helper — runtime code references ids directly).
+const tradeId = (catName, tradeName) => {
+  const c = initialCategories.find((c) => c.name === catName);
+  return c?.trades.find((t) => t.name === tradeName)?.id;
+};
 
 export const initialContractors = [
-  { id: uid("ctr"), name: "Alex Reid", company: "Reid Drywall Co.", tradeIds: [initialTrades[0].id] },
-  { id: uid("ctr"), name: "Priya Shah", company: "Bright Spark Electric", tradeIds: [initialTrades[1].id] },
-  { id: uid("ctr"), name: "Carlos Mendes", company: "Mendes Plastering Ltd.", tradeIds: [initialTrades[2].id] },
-  { id: uid("ctr"), name: "Sam Chen", company: "Chen Carpentry", tradeIds: [initialTrades[3].id] },
-  { id: uid("ctr"), name: "Ola Adeyemi", company: "Adeyemi Paints", tradeIds: [initialTrades[4].id] },
+  {
+    id: uid("ctr"),
+    name: "Alex Reid",
+    company: "Reid Drywall Co.",
+    tradeIds: [
+      tradeId("Flat", "Drylining"),
+      tradeId("Corridor", "Drylining"),
+      tradeId("Staircase", "Drylining"),
+    ].filter(Boolean),
+  },
+  {
+    id: uid("ctr"),
+    name: "Priya Shah",
+    company: "Bright Spark Electric",
+    tradeIds: [
+      tradeId("Flat", "M&E (First Fix)"),
+      tradeId("Corridor", "M&E"),
+    ].filter(Boolean),
+  },
+  {
+    id: uid("ctr"),
+    name: "Carlos Mendes",
+    company: "Mendes Plastering Ltd.",
+    tradeIds: [
+      tradeId("Flat", "Plastering"),
+      tradeId("Corridor", "Plastering"),
+      tradeId("Staircase", "Plastering"),
+    ].filter(Boolean),
+  },
+  {
+    id: uid("ctr"),
+    name: "Sam Chen",
+    company: "Chen Carpentry",
+    tradeIds: [tradeId("Flat", "Carpentry (Second Fix)")].filter(Boolean),
+  },
+  {
+    id: uid("ctr"),
+    name: "Ola Adeyemi",
+    company: "Adeyemi Paints",
+    tradeIds: [
+      tradeId("Flat", "Painting & Decoration"),
+      tradeId("Corridor", "Painting"),
+      tradeId("Staircase", "Painting"),
+    ].filter(Boolean),
+  },
 ];
 
-// A site is composed of typed "units" — flats *and* shared parts like
-// corridors, staircases, lobbies. Each unit tracks its own progress cursor.
-// The `type` field is free-form so operators can add anything (lift shaft,
-// roof plant, etc.); UNIT_TYPE_SUGGESTIONS just powers the datalist.
-export const UNIT_TYPE_SUGGESTIONS = [
-  "Flat",
-  "Corridor",
-  "Staircase",
-  "Lobby",
-  "Lift Shaft",
-  "Roof Plant",
-  "Common Area",
-];
-
-// Default every newly-created unit to the full stage list. Seed corridors
-// and staircases with a deliberately smaller subset so the per-unit
-// difference shows up in the matrix immediately.
-const allStageIds = () => initialStages.map((s) => s.id);
-const stageIdsByIndex = (idxs) =>
-  idxs.map((i) => initialStages[i]?.id).filter(Boolean);
-
-const unit = (name, type = "Flat", stageIds = allStageIds()) => ({
+const catId = (name) => initialCategories.find((c) => c.name === name)?.id;
+const unit = (name, categoryName) => ({
   id: uid("unt"),
   name,
-  type,
-  stageIds,
+  categoryId: catId(categoryName),
 });
 
 const buildSite = (name, address, units, access) => ({
@@ -93,10 +149,8 @@ export const initialSites = [
       unit("A102", "Flat"),
       unit("A103", "Flat"),
       unit("A201", "Flat"),
-      // Corridor skips Second Fix Carpentry (idx 3) — no carpentry there.
-      unit("Floor 1 Corridor", "Corridor", stageIdsByIndex([0, 1, 2, 4])),
-      // Staircase only needs structural + decoration stages.
-      unit("Staircase A", "Staircase", stageIdsByIndex([0, 2, 4])),
+      unit("Floor 1 Corridor", "Corridor"),
+      unit("Staircase A", "Staircase"),
     ],
     ["Sarah Chen (Site Manager)", "Mark Williams (Subcontractor Mgr)"],
   ),
@@ -108,17 +162,12 @@ export const initialSites = [
   ),
 ];
 
-// flatProgress[unitId] = {
-//   activeStageIdx,
-//   completions: [{ stageId, tradeId, contractorId, at }],
-//   stageSubmissions: { [stageId]: { [tradeId]: { contractorId, at } } }
-// }
-// Keyed by unit id (any unit type — flat, corridor, staircase…). A stage
-// with N linked trades requires N per-trade submissions before it advances.
 export const buildInitialProgress = (sites) => {
   const m = {};
-  sites.forEach((s) => s.units.forEach((u) => {
-    m[u.id] = { activeStageIdx: 0, completions: [], stageSubmissions: {} };
-  }));
+  sites.forEach((s) =>
+    s.units.forEach((u) => {
+      m[u.id] = { activeStageIdx: 0, completions: [], stageSubmissions: {} };
+    }),
+  );
   return m;
 };

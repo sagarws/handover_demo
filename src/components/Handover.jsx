@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useApp } from "../store.jsx";
-import { Card, Button, Select, Pill, EmptyHint, PageHeader } from "./ui.jsx";
+import {
+  Card, Button, Select, Pill, EmptyHint, PageHeader, Combobox,
+} from "./ui.jsx";
 
 function formatTime(iso) {
   const d = new Date(iso);
@@ -14,54 +16,52 @@ function formatTime(iso) {
 
 export function Handover() {
   const {
-    sites, stages, stageTradeMap, trades, contractors, flatProgress,
-    handovers, completeActiveStage,
+    sites, categories, contractors, flatProgress, handovers,
+    getCategory, completeActiveStage,
   } = useApp();
 
   const [siteId, setSiteId] = useState(sites[0]?.id ?? "");
   const site = sites.find((s) => s.id === siteId);
-  const [flatId, setFlatId] = useState(site?.units[0]?.id ?? "");
-  const flat = site?.units.find((f) => f.id === flatId);
+  const [unitId, setUnitId] = useState(site?.units[0]?.id ?? "");
+  const unit = site?.units.find((f) => f.id === unitId);
   const [contractorId, setContractorId] = useState("");
   const [submitTradeId, setSubmitTradeId] = useState("");
 
-  // Keep unit in sync when site changes.
+  // Lookups.
+  const category = unit ? getCategory(unit.categoryId) : null;
+  const stages = category?.stages ?? [];
+  const stageTradeMap = category?.stageTradeMap ?? {};
+  const trades = category?.trades ?? [];
+  const tradeName = (id) => trades.find((t) => t.id === id)?.name ?? "—";
+  const contractorLabel = (id) => {
+    const c = contractors.find((x) => x.id === id);
+    return c ? `${c.name}${c.company ? ` · ${c.company}` : ""}` : "Unknown";
+  };
+
+  // Keep unit selection in sync when site changes.
   useEffect(() => {
-    if (!site) {
-      setFlatId("");
-      return;
+    if (!site) return setUnitId("");
+    if (!site.units.find((f) => f.id === unitId)) {
+      setUnitId(site.units[0]?.id ?? "");
     }
-    if (!site.units.find((f) => f.id === flatId)) {
-      setFlatId(site.units[0]?.id ?? "");
-    }
-  }, [site, flatId]);
+  }, [site, unitId]);
 
-  // The unit walks only its own stage subset, in the global order. Indexing
-  // into `unitStages` means a unit that skips a global stage simply hops
-  // straight to its next included stage.
-  const unitStages = useMemo(() => {
-    if (!flat) return [];
-    const allowed = new Set(flat.stageIds ?? []);
-    return stages.filter((s) => allowed.has(s.id));
-  }, [flat, stages]);
-
-  const progress = flat ? flatProgress[flat.id] : null;
+  const progress = unit ? flatProgress[unit.id] : null;
   const activeIdx = progress?.activeStageIdx ?? 0;
-  const activeStage = unitStages[activeIdx];
-  const finished = unitStages.length > 0 && !activeStage;
+  const activeStage = stages[activeIdx];
+  const finished = stages.length > 0 && !activeStage;
 
   const requiredTradeIds = activeStage ? stageTradeMap[activeStage.id] ?? [] : [];
   const activeSubmissions = activeStage
     ? progress?.stageSubmissions?.[activeStage.id] ?? {}
     : {};
-  // Slots the current stage still needs filled.
   const unfilledTradeIds = useMemo(
     () => requiredTradeIds.filter((tid) => !activeSubmissions[tid]),
     [requiredTradeIds, activeSubmissions],
   );
 
-  // A contractor is eligible if they carry at least one of the unfilled
-  // slots — that's the rule "any contractor of any matching trade can submit".
+  // A contractor is eligible if they carry one of the still-unfilled
+  // category-scoped trade ids.
   const eligibleContractors = useMemo(() => {
     if (requiredTradeIds.length === 0) return contractors;
     if (unfilledTradeIds.length === 0) return [];
@@ -70,68 +70,67 @@ export function Handover() {
     );
   }, [contractors, requiredTradeIds, unfilledTradeIds]);
 
-  // For the chosen contractor: which still-unfilled trade slots can they
-  // submit against?
   const availableSubmitTradeIds = useMemo(() => {
     const c = contractors.find((x) => x.id === contractorId);
     if (!c) return [];
-    if (requiredTradeIds.length === 0) {
-      // free-form: let them submit under any of their own trades
-      return c.tradeIds;
-    }
+    if (requiredTradeIds.length === 0) return c.tradeIds;
     return c.tradeIds.filter((tid) => unfilledTradeIds.includes(tid));
   }, [contractors, contractorId, requiredTradeIds, unfilledTradeIds]);
 
-  // Reset contractor when the active stage (and so the eligible pool) changes.
   useEffect(() => {
     if (!eligibleContractors.find((c) => c.id === contractorId)) {
       setContractorId(eligibleContractors[0]?.id ?? "");
     }
   }, [eligibleContractors, contractorId]);
 
-  // Keep trade slot selection in sync with the contractor's available slots.
   useEffect(() => {
     if (!availableSubmitTradeIds.includes(submitTradeId)) {
       setSubmitTradeId(availableSubmitTradeIds[0] ?? "");
     }
   }, [availableSubmitTradeIds, submitTradeId]);
 
-  const tradeName = (id) => trades.find((t) => t.id === id)?.name ?? "—";
-  const contractorLabel = (id) => {
-    const c = contractors.find((x) => x.id === id);
-    return c ? `${c.name}${c.company ? ` · ${c.company}` : ""}` : "Unknown";
-  };
-
   const completionsByStage = useMemo(() => {
-    // Aggregate completions per stage — used by the stage timeline below.
     const m = {};
     (progress?.completions ?? []).forEach((c) => {
-      if (!m[c.stageId]) m[c.stageId] = [];
-      m[c.stageId].push(c);
+      (m[c.stageId] ||= []).push(c);
     });
     return m;
   }, [progress]);
 
   const flatHandovers = useMemo(
-    () => handovers.filter((h) => h.flatId === flat?.id),
-    [handovers, flat?.id],
+    () => handovers.filter((h) => h.flatId === unit?.id),
+    [handovers, unit?.id],
   );
 
-  // Stage progress fraction for the headline pill.
   const slotCount = requiredTradeIds.length || 1;
-  const filledCount = requiredTradeIds.length > 0
-    ? requiredTradeIds.filter((t) => activeSubmissions[t]).length
-    : Object.keys(activeSubmissions).length;
+  const filledCount =
+    requiredTradeIds.length > 0
+      ? requiredTradeIds.filter((t) => activeSubmissions[t]).length
+      : Object.keys(activeSubmissions).length;
   const stagePct = Math.round((filledCount / slotCount) * 100);
+
+  // Build searchable unit options grouped by category for the Combobox.
+  const unitOptions = useMemo(() => {
+    if (!site) return [];
+    return site.units.map((u) => {
+      const cat = getCategory(u.categoryId);
+      return {
+        value: u.id,
+        label: u.name,
+        group: cat?.name ?? "Unknown",
+        hint: cat ? `${cat.stages.length} stages` : "",
+      };
+    });
+  }, [site, getCategory]);
 
   return (
     <div className="space-y-5">
       <PageHeader
         title="Handover"
-        description="Pick any unit (flat, corridor, staircase, …) and submit its active stage's trade slots one at a time. A stage only advances once every linked trade has been handed over — each trade contributes 1/N of the stage's progress. Every unit progresses independently."
+        description="Pick a unit and submit its active stage's trade slots one at a time. Each unit walks the stage list defined for its category — a flat, a corridor and a staircase progress completely independently. A stage only advances once every linked trade has been handed over."
       />
 
-      <Card title="Pick site & flat">
+      <Card title="Pick site & unit">
         {sites.length === 0 ? (
           <EmptyHint>No sites yet — add one in Sites.</EmptyHint>
         ) : (
@@ -150,67 +149,48 @@ export function Handover() {
             </div>
             <div>
               <label className="mb-1 block text-[11px] font-medium text-slate-500">
-                Unit
+                Unit (type to search · grouped by category)
               </label>
-              <Select
-                value={flatId}
-                onChange={(e) => setFlatId(e.target.value)}
+              <Combobox
+                value={unitId}
+                onChange={setUnitId}
+                options={unitOptions}
+                placeholder={site?.units.length ? "Type or pick a unit…" : "No units on this site"}
+                emptyLabel="No units match"
                 disabled={!site || site.units.length === 0}
-              >
-                {site?.units.length ? (
-                  // Group units by type so the picker mirrors the matrix
-                  // layout (flats together, corridors together, etc.).
-                  Object.entries(
-                    site.units.reduce((acc, u) => {
-                      const k = u.type || "Other";
-                      (acc[k] ||= []).push(u);
-                      return acc;
-                    }, {}),
-                  ).map(([type, items]) => (
-                    <optgroup key={type} label={type}>
-                      {items.map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.name}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ))
-                ) : (
-                  <option>No units</option>
-                )}
-              </Select>
+              />
             </div>
           </div>
         )}
       </Card>
 
-      {flat && (
+      {unit && (
         <Card
           title={
             <span className="flex items-center gap-2">
-              {flat.name}
-              <Pill tone="slate">{flat.type}</Pill>
+              {unit.name}
+              <Pill tone="slate">{category?.name ?? "—"}</Pill>
               <Pill tone={finished ? "green" : "blue"}>
-                {unitStages.length === 0
-                  ? "No stages selected"
+                {stages.length === 0
+                  ? "No stages in category"
                   : finished
                     ? "All stages complete"
-                    : `Stage ${activeIdx + 1} of ${unitStages.length}`}
+                    : `Stage ${activeIdx + 1} of ${stages.length}`}
               </Pill>
             </span>
           }
         >
-          {unitStages.length === 0 ? (
+          {stages.length === 0 ? (
             <EmptyHint>
-              This unit has no stages selected — open the Sites page and tick
-              the stages it should pass through.
+              The “{category?.name}” category has no stages — define some in
+              Configuration.
             </EmptyHint>
           ) : finished ? (
             <div className="rounded-md bg-emerald-50 px-4 py-6 text-center text-sm text-emerald-700">
               ✓ Every stage on this unit has been handed over.
             </div>
           ) : !activeStage ? (
-            <EmptyHint>No stages configured.</EmptyHint>
+            <EmptyHint>No active stage.</EmptyHint>
           ) : (
             <div className="grid gap-4 md:grid-cols-[1fr,260px]">
               <div className="rounded-lg border border-brand-200 bg-brand-50/50 p-4">
@@ -233,7 +213,6 @@ export function Handover() {
                   </div>
                 </div>
 
-                {/* Per-slot bar */}
                 <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-white ring-1 ring-brand-200">
                   {Array.from({ length: slotCount }).map((_, i) => (
                     <div
@@ -245,7 +224,6 @@ export function Handover() {
                   ))}
                 </div>
 
-                {/* Required-trade checklist */}
                 <div className="mt-4">
                   <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     Required trades
@@ -296,7 +274,6 @@ export function Handover() {
                   )}
                 </div>
 
-                {/* Submission form */}
                 {unfilledTradeIds.length > 0 && (
                   <div className="mt-4 space-y-3 rounded-md border border-slate-200 bg-white p-3">
                     <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
@@ -304,8 +281,9 @@ export function Handover() {
                     </div>
                     {eligibleContractors.length === 0 ? (
                       <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                        No contractor carries any of the pending trades. Tag a
-                        contractor on the Contractors page.
+                        No contractor carries any of the pending trades for the
+                        “{category?.name}” category. Tag a contractor on the
+                        Contractors page.
                       </div>
                     ) : (
                       <>
@@ -319,9 +297,7 @@ export function Handover() {
                           >
                             {eligibleContractors.map((c) => {
                               const matches = c.tradeIds
-                                .filter((tid) =>
-                                  unfilledTradeIds.includes(tid),
-                                )
+                                .filter((tid) => unfilledTradeIds.includes(tid))
                                 .map(tradeName)
                                 .join(", ");
                               return (
@@ -342,9 +318,7 @@ export function Handover() {
                             </label>
                             <Select
                               value={submitTradeId}
-                              onChange={(e) =>
-                                setSubmitTradeId(e.target.value)
-                              }
+                              onChange={(e) => setSubmitTradeId(e.target.value)}
                             >
                               {availableSubmitTradeIds.map((tid) => (
                                 <option key={tid} value={tid}>
@@ -361,7 +335,7 @@ export function Handover() {
                             disabled={!contractorId || !submitTradeId}
                             onClick={() =>
                               completeActiveStage(
-                                flat.id,
+                                unit.id,
                                 contractorId,
                                 submitTradeId,
                               )
@@ -375,7 +349,7 @@ export function Handover() {
                           <span className="text-[11px] text-slate-500">
                             {filledCount + 1 >= slotCount
                               ? `Final slot — completes stage, advances to ${
-                                  unitStages[activeIdx + 1]?.name ?? "completion"
+                                  stages[activeIdx + 1]?.name ?? "completion"
                                 }`
                               : `Stage stays active — ${
                                   slotCount - filledCount - 1
@@ -392,18 +366,18 @@ export function Handover() {
                 <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                   Up next
                 </div>
-                {unitStages[activeIdx + 1] ? (
+                {stages[activeIdx + 1] ? (
                   <>
                     <div className="mt-1 text-sm font-medium text-ink">
-                      {unitStages[activeIdx + 1].name}
+                      {stages[activeIdx + 1].name}
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-slate-500">
                       <span>Trades:</span>
-                      {(stageTradeMap[unitStages[activeIdx + 1].id] ?? []).length ===
+                      {(stageTradeMap[stages[activeIdx + 1].id] ?? []).length ===
                       0 ? (
                         <Pill tone="rose">none</Pill>
                       ) : (
-                        (stageTradeMap[unitStages[activeIdx + 1].id] ?? []).map(
+                        (stageTradeMap[stages[activeIdx + 1].id] ?? []).map(
                           (tid) => (
                             <Pill key={tid} tone="slate">
                               {tradeName(tid)}
@@ -422,27 +396,27 @@ export function Handover() {
             </div>
           )}
 
-          {/* Stage timeline — only the stages this unit actually goes through */}
+          {/* Stage timeline — this unit's category stages */}
           <div className="mt-5">
             <div className="mb-2 flex items-center justify-between">
               <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                Stage timeline · this unit
+                Stage timeline · {category?.name} category
               </span>
               <span className="text-[11px] text-slate-400">
-                {unitStages.length} of {stages.length} global stages selected
+                {stages.length} stages defined
               </span>
             </div>
             <ol className="space-y-1.5">
-              {unitStages.map((s, i) => {
+              {stages.map((s, i) => {
                 const subs = progress?.stageSubmissions?.[s.id] ?? {};
-                const stageCompletions = completionsByStage[s.id] ?? [];
                 const isActive = i === activeIdx;
                 const isDone = i < activeIdx;
                 const tradeIds = stageTradeMap[s.id] ?? [];
                 const total = tradeIds.length || 1;
-                const filled = tradeIds.length > 0
-                  ? tradeIds.filter((t) => subs[t]).length
-                  : Object.keys(subs).length;
+                const filled =
+                  tradeIds.length > 0
+                    ? tradeIds.filter((t) => subs[t]).length
+                    : Object.keys(subs).length;
                 return (
                   <li
                     key={s.id}
@@ -473,10 +447,7 @@ export function Handover() {
                         <Pill tone="rose">no trade</Pill>
                       ) : (
                         tradeIds.map((tid) => (
-                          <Pill
-                            key={tid}
-                            tone={subs[tid] ? "green" : "slate"}
-                          >
+                          <Pill key={tid} tone={subs[tid] ? "green" : "slate"}>
                             {subs[tid] ? "✓ " : ""}
                             {tradeName(tid)}
                           </Pill>
@@ -485,7 +456,7 @@ export function Handover() {
                     </div>
                     {isDone ? (
                       <span className="hidden md:inline text-[11px] text-slate-500">
-                        {stageCompletions.length} submission(s)
+                        {(completionsByStage[s.id] ?? []).length} submission(s)
                       </span>
                     ) : isActive ? (
                       <Pill tone="blue">
@@ -502,17 +473,16 @@ export function Handover() {
         </Card>
       )}
 
-      {/* Handover log */}
       <Card
         title="Handover log"
         right={
           <span className="text-[11px] text-slate-400">
-            Most recent first {flat ? `· ${flat.name}` : ""}
+            Most recent first {unit ? `· ${unit.name}` : ""}
           </span>
         }
       >
-        {!flat ? (
-          <EmptyHint>Pick a flat to see its handover events.</EmptyHint>
+        {!unit ? (
+          <EmptyHint>Pick a unit to see its handover events.</EmptyHint>
         ) : flatHandovers.length === 0 ? (
           <EmptyHint>
             No submissions yet — fill the first trade slot above.
@@ -545,7 +515,7 @@ export function Handover() {
                       ) : (
                         <>
                           <span className="text-slate-400">→</span>
-                          <Pill tone="green">flat complete</Pill>
+                          <Pill tone="green">unit complete</Pill>
                         </>
                       )
                     ) : (
@@ -553,9 +523,7 @@ export function Handover() {
                         <span className="text-slate-400">→</span>
                         <Pill tone="amber">
                           {h.filledCount}/{h.slotCount} done · waiting for{" "}
-                          {h.pendingTradeIds
-                            .map(tradeName)
-                            .join(", ")}
+                          {h.pendingTradeIds.map(tradeName).join(", ")}
                         </Pill>
                       </>
                     )}
