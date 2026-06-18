@@ -48,45 +48,63 @@ export const initialContractors = [
   { id: uid("ctr"), name: "Ola Adeyemi", company: "Adeyemi Paints", tradeIds: [initialTrades[4].id] },
 ];
 
-// Build a site with flats; each flat tracks its own active-stage cursor.
-const buildSite = (name, address, flatNames, access) => {
-  const id = uid("ste");
-  return {
-    id,
-    name,
-    address,
-    access,
-    flats: flatNames.map((n) => ({ id: uid("flt"), name: n })),
-  };
-};
+// A site is composed of typed "units" — flats *and* shared parts like
+// corridors, staircases, lobbies. Each unit tracks its own progress cursor.
+// The `type` field is free-form so operators can add anything (lift shaft,
+// roof plant, etc.); UNIT_TYPE_SUGGESTIONS just powers the datalist.
+export const UNIT_TYPE_SUGGESTIONS = [
+  "Flat",
+  "Corridor",
+  "Staircase",
+  "Lobby",
+  "Lift Shaft",
+  "Roof Plant",
+  "Common Area",
+];
+
+const unit = (name, type = "Flat") => ({ id: uid("unt"), name, type });
+
+const buildSite = (name, address, units, access) => ({
+  id: uid("ste"),
+  name,
+  address,
+  access,
+  units,
+});
 
 export const initialSites = [
   buildSite(
     "Riverside Phase 1 — Block A",
     "Wapping High Street, London E1W",
-    ["A101", "A102", "A103", "A201"],
+    [
+      unit("A101", "Flat"),
+      unit("A102", "Flat"),
+      unit("A103", "Flat"),
+      unit("A201", "Flat"),
+      unit("Floor 1 Corridor", "Corridor"),
+      unit("Staircase A", "Staircase"),
+    ],
     ["Sarah Chen (Site Manager)", "Mark Williams (Subcontractor Mgr)"],
   ),
   buildSite(
     "Greenfield Mews",
     "Greenfield Road, Manchester M4",
-    ["B01", "B02"],
+    [unit("B01", "Flat"), unit("B02", "Flat")],
     ["Emma Roberts (Office)"],
   ),
 ];
 
-// flatProgress[flatId] = {
+// flatProgress[unitId] = {
 //   activeStageIdx,
 //   completions: [{ stageId, tradeId, contractorId, at }],
 //   stageSubmissions: { [stageId]: { [tradeId]: { contractorId, at } } }
 // }
-// A stage with N linked trades requires N per-trade submissions before it
-// advances. completions is a flat append-only log; stageSubmissions is the
-// per-slot map the UI reads from.
+// Keyed by unit id (any unit type — flat, corridor, staircase…). A stage
+// with N linked trades requires N per-trade submissions before it advances.
 export const buildInitialProgress = (sites) => {
   const m = {};
-  sites.forEach((s) => s.flats.forEach((f) => {
-    m[f.id] = { activeStageIdx: 0, completions: [], stageSubmissions: {} };
+  sites.forEach((s) => s.units.forEach((u) => {
+    m[u.id] = { activeStageIdx: 0, completions: [], stageSubmissions: {} };
   }));
   return m;
 };

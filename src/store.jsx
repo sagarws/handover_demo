@@ -124,26 +124,32 @@ export function AppProvider({ children }) {
   const removeSite = useCallback((id) => {
     setSites((ss) => ss.filter((s) => s.id !== id));
   }, []);
-  const addFlat = useCallback((siteId, name) => {
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    const flatId = uid("flt");
+  const addUnit = useCallback((siteId, { name, type }) => {
+    const trimmedName = name.trim();
+    const trimmedType = (type || "").trim() || "Flat";
+    if (!trimmedName) return;
+    const unitId = uid("unt");
     setSites((ss) =>
       ss.map((s) =>
-        s.id === siteId ? { ...s, flats: [...s.flats, { id: flatId, name: trimmed }] } : s,
+        s.id === siteId
+          ? { ...s, units: [...s.units, { id: unitId, name: trimmedName, type: trimmedType }] }
+          : s,
       ),
     );
-    setFlatProgress((fp) => ({ ...fp, [flatId]: { activeStageIdx: 0, completions: [] } }));
+    setFlatProgress((fp) => ({
+      ...fp,
+      [unitId]: { activeStageIdx: 0, completions: [], stageSubmissions: {} },
+    }));
   }, []);
-  const removeFlat = useCallback((siteId, flatId) => {
+  const removeUnit = useCallback((siteId, unitId) => {
     setSites((ss) =>
       ss.map((s) =>
-        s.id === siteId ? { ...s, flats: s.flats.filter((f) => f.id !== flatId) } : s,
+        s.id === siteId ? { ...s, units: s.units.filter((u) => u.id !== unitId) } : s,
       ),
     );
     setFlatProgress((fp) => {
       const next = { ...fp };
-      delete next[flatId];
+      delete next[unitId];
       return next;
     });
   }, []);
@@ -255,7 +261,7 @@ export function AppProvider({ children }) {
       addStage, renameStage, removeStage, moveStage,
       addStageTrade, removeStageTrade,
       addContractor, removeContractor,
-      addSite, updateSite, removeSite, addFlat, removeFlat,
+      addSite, updateSite, removeSite, addUnit, removeUnit,
       addSiteAccess, removeSiteAccess,
       completeActiveStage,
     }),
@@ -265,7 +271,7 @@ export function AppProvider({ children }) {
       addStage, renameStage, removeStage, moveStage,
       addStageTrade, removeStageTrade,
       addContractor, removeContractor,
-      addSite, updateSite, removeSite, addFlat, removeFlat,
+      addSite, updateSite, removeSite, addUnit, removeUnit,
       addSiteAccess, removeSiteAccess,
       completeActiveStage,
     ],

@@ -20,19 +20,19 @@ export function Handover() {
 
   const [siteId, setSiteId] = useState(sites[0]?.id ?? "");
   const site = sites.find((s) => s.id === siteId);
-  const [flatId, setFlatId] = useState(site?.flats[0]?.id ?? "");
-  const flat = site?.flats.find((f) => f.id === flatId);
+  const [flatId, setFlatId] = useState(site?.units[0]?.id ?? "");
+  const flat = site?.units.find((f) => f.id === flatId);
   const [contractorId, setContractorId] = useState("");
   const [submitTradeId, setSubmitTradeId] = useState("");
 
-  // Keep flat in sync when site changes.
+  // Keep unit in sync when site changes.
   useEffect(() => {
     if (!site) {
       setFlatId("");
       return;
     }
-    if (!site.flats.find((f) => f.id === flatId)) {
-      setFlatId(site.flats[0]?.id ?? "");
+    if (!site.units.find((f) => f.id === flatId)) {
+      setFlatId(site.units[0]?.id ?? "");
     }
   }, [site, flatId]);
 
@@ -119,7 +119,7 @@ export function Handover() {
     <div className="space-y-5">
       <PageHeader
         title="Handover"
-        description="Pick a flat, see its active stage's per-trade checklist, and submit one trade slot at a time. A stage only advances once every linked trade has been handed over — each trade contributes 1/N of the stage's progress."
+        description="Pick any unit (flat, corridor, staircase, …) and submit its active stage's trade slots one at a time. A stage only advances once every linked trade has been handed over — each trade contributes 1/N of the stage's progress. Every unit progresses independently."
       />
 
       <Card title="Pick site & flat">
@@ -141,21 +141,33 @@ export function Handover() {
             </div>
             <div>
               <label className="mb-1 block text-[11px] font-medium text-slate-500">
-                Flat
+                Unit
               </label>
               <Select
                 value={flatId}
                 onChange={(e) => setFlatId(e.target.value)}
-                disabled={!site || site.flats.length === 0}
+                disabled={!site || site.units.length === 0}
               >
-                {site?.flats.length ? (
-                  site.flats.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.name}
-                    </option>
+                {site?.units.length ? (
+                  // Group units by type so the picker mirrors the matrix
+                  // layout (flats together, corridors together, etc.).
+                  Object.entries(
+                    site.units.reduce((acc, u) => {
+                      const k = u.type || "Other";
+                      (acc[k] ||= []).push(u);
+                      return acc;
+                    }, {}),
+                  ).map(([type, items]) => (
+                    <optgroup key={type} label={type}>
+                      {items.map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.name}
+                        </option>
+                      ))}
+                    </optgroup>
                   ))
                 ) : (
-                  <option>No flats</option>
+                  <option>No units</option>
                 )}
               </Select>
             </div>
@@ -168,6 +180,7 @@ export function Handover() {
           title={
             <span className="flex items-center gap-2">
               {flat.name}
+              <Pill tone="slate">{flat.type}</Pill>
               <Pill tone={finished ? "green" : "blue"}>
                 {finished
                   ? "All stages complete"

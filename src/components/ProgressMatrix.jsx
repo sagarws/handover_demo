@@ -15,14 +15,28 @@ export function ProgressMatrix() {
   const site = sites.find((s) => s.id === siteId);
   const tradeName = (id) => trades.find((t) => t.id === id)?.name ?? "—";
 
-  // Stats roll up all stages of all flats including partial credit for the
-  // active stage (e.g. 1/2 of a stage's trades submitted = 0.5 cells done).
+  // Group units by type so we render a separate matrix per type
+  // (Flats / Corridors / Staircases / …). Each group's progress reads
+  // independently.
+  const groupedUnits = useMemo(() => {
+    if (!site) return [];
+    const m = new Map();
+    site.units.forEach((u) => {
+      const k = u.type || "Other";
+      if (!m.has(k)) m.set(k, []);
+      m.get(k).push(u);
+    });
+    return [...m.entries()];
+  }, [site]);
+
+  // Roll up all stages of all units including partial credit for the active
+  // stage (e.g. 1/2 of a stage's trades submitted = 0.5 cells done).
   const stats = useMemo(() => {
     if (!site) return null;
-    const total = site.flats.length * stages.length;
+    const total = site.units.length * stages.length;
     let done = 0;
     let active = 0;
-    site.flats.forEach((f) => {
+    site.units.forEach((f) => {
       const p = flatProgress[f.id];
       if (!p) return;
       done += Math.min(p.activeStageIdx, stages.length);
@@ -50,7 +64,7 @@ export function ProgressMatrix() {
     <div className="space-y-5">
       <PageHeader
         title="Progress Matrix"
-        description="Each row is a flat, each column is a stage. The active cell fills proportionally — one notch per trade submitted — and only flips fully green when every linked trade has been handed over."
+        description="One row per unit, one column per stage. Units are grouped by type (flats / corridors / staircases / …) so each part of the site progresses independently. The active cell fills one notch per trade submitted and only flips fully green when every linked trade has been handed over."
       />
 
       <Card
@@ -77,16 +91,22 @@ export function ProgressMatrix() {
         )}
       </Card>
 
-      <Card title="Matrix">
-        {!site ? (
+      {!site ? (
+        <Card title="Matrix">
           <EmptyHint>Pick a site above.</EmptyHint>
-        ) : site.flats.length === 0 ? (
-          <EmptyHint>This site has no flats yet.</EmptyHint>
-        ) : stages.length === 0 ? (
+        </Card>
+      ) : site.units.length === 0 ? (
+        <Card title="Matrix">
+          <EmptyHint>This site has no units yet — add flats, corridors, etc. in Sites.</EmptyHint>
+        </Card>
+      ) : stages.length === 0 ? (
+        <Card title="Matrix">
           <EmptyHint>No stages defined — add some in Configuration.</EmptyHint>
-        ) : (
-          <>
-            <div className="mb-3 flex flex-wrap gap-3 text-[11px] text-slate-500">
+        </Card>
+      ) : (
+        <>
+          <Card title="Legend">
+            <div className="flex flex-wrap gap-3 text-[11px] text-slate-500">
               {LEGEND.map((l) => (
                 <span key={l.key} className="inline-flex items-center gap-1.5">
                   <span className={`h-3 w-3 rounded ${l.className}`} />
@@ -94,86 +114,98 @@ export function ProgressMatrix() {
                 </span>
               ))}
             </div>
-            <div className="scroll-x overflow-x-auto">
-              <table className="w-full min-w-[720px] border-separate border-spacing-0 text-xs">
-                <thead>
-                  <tr>
-                    <th className="sticky left-0 z-10 bg-white px-2 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                      Flat
-                    </th>
-                    {stages.map((s, i) => {
-                      const ids = stageTradeMap[s.id] ?? [];
+          </Card>
+          {groupedUnits.map(([type, units]) => (
+            <Card
+              key={type}
+              title={`${type} (${units.length})`}
+              right={
+                <span className="text-[11px] text-slate-400">
+                  Each row is one {type.toLowerCase()} · independent progress
+                </span>
+              }
+            >
+              <div className="scroll-x overflow-x-auto">
+                <table className="w-full min-w-[720px] border-separate border-spacing-0 text-xs">
+                  <thead>
+                    <tr>
+                      <th className="sticky left-0 z-10 bg-white px-2 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                        {type}
+                      </th>
+                      {stages.map((s, i) => {
+                        const ids = stageTradeMap[s.id] ?? [];
+                        return (
+                          <th
+                            key={s.id}
+                            className="min-w-[110px] border-b border-slate-100 px-2 py-2 align-top"
+                          >
+                            <div className="flex flex-col items-center gap-1 text-center">
+                              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 text-[10px] font-semibold text-slate-500">
+                                {i + 1}
+                              </span>
+                              <span className="text-[11px] font-semibold leading-tight text-ink">
+                                {s.name}
+                              </span>
+                              {ids.length > 0 && (
+                                <div className="flex flex-wrap justify-center gap-1">
+                                  {ids.map((tid) => (
+                                    <span
+                                      key={tid}
+                                      className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600"
+                                    >
+                                      {tradeName(tid)}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </th>
+                        );
+                      })}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {units.map((f) => {
+                      const p = flatProgress[f.id] ?? {
+                        activeStageIdx: 0,
+                        stageSubmissions: {},
+                      };
+                      const finished = p.activeStageIdx >= stages.length;
                       return (
-                        <th
-                          key={s.id}
-                          className="min-w-[110px] border-b border-slate-100 px-2 py-2 align-top"
-                        >
-                          <div className="flex flex-col items-center gap-1 text-center">
-                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 text-[10px] font-semibold text-slate-500">
-                              {i + 1}
-                            </span>
-                            <span className="text-[11px] font-semibold leading-tight text-ink">
-                              {s.name}
-                            </span>
-                            {ids.length > 0 && (
-                              <div className="flex flex-wrap justify-center gap-1">
-                                {ids.map((tid) => (
-                                  <span
-                                    key={tid}
-                                    className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600"
-                                  >
-                                    {tradeName(tid)}
-                                  </span>
-                                ))}
-                              </div>
+                        <tr key={f.id} className="hover:bg-slate-50">
+                          <td className="sticky left-0 z-10 bg-white px-2 py-2 text-xs font-semibold text-ink">
+                            {f.name}
+                            {finished && (
+                              <Pill tone="green" className="ml-2">
+                                completed
+                              </Pill>
                             )}
-                          </div>
-                        </th>
+                          </td>
+                          {stages.map((s, i) => (
+                            <td
+                              key={s.id}
+                              className="border-b border-slate-50 p-1 text-center"
+                            >
+                              <Cell
+                                flatProgress={p}
+                                stage={s}
+                                stageIdx={i}
+                                stageTradeMap={stageTradeMap}
+                                tradeName={tradeName}
+                                flatName={f.name}
+                              />
+                            </td>
+                          ))}
+                        </tr>
                       );
                     })}
-                  </tr>
-                </thead>
-                <tbody>
-                  {site.flats.map((f) => {
-                    const p = flatProgress[f.id] ?? {
-                      activeStageIdx: 0,
-                      stageSubmissions: {},
-                    };
-                    const finished = p.activeStageIdx >= stages.length;
-                    return (
-                      <tr key={f.id} className="hover:bg-slate-50">
-                        <td className="sticky left-0 z-10 bg-white px-2 py-2 text-xs font-semibold text-ink">
-                          {f.name}
-                          {finished && (
-                            <Pill tone="green" className="ml-2">
-                              completed
-                            </Pill>
-                          )}
-                        </td>
-                        {stages.map((s, i) => (
-                          <td
-                            key={s.id}
-                            className="border-b border-slate-50 p-1 text-center"
-                          >
-                            <Cell
-                              flatProgress={p}
-                              stage={s}
-                              stageIdx={i}
-                              stageTradeMap={stageTradeMap}
-                              tradeName={tradeName}
-                              flatName={f.name}
-                            />
-                          </td>
-                        ))}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
-      </Card>
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          ))}
+        </>
+      )}
     </div>
   );
 }
