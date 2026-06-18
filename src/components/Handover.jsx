@@ -23,6 +23,7 @@ export function Handover() {
   const [flatId, setFlatId] = useState(site?.flats[0]?.id ?? "");
   const flat = site?.flats.find((f) => f.id === flatId);
   const [contractorId, setContractorId] = useState("");
+  const [submitTradeId, setSubmitTradeId] = useState("");
 
   // Keep flat in sync when site changes.
   useEffect(() => {
@@ -41,43 +42,63 @@ export function Handover() {
   const finished = !activeStage;
 
   const requiredTradeIds = activeStage ? stageTradeMap[activeStage.id] ?? [] : [];
-  const requiredTrades = trades.filter((t) => requiredTradeIds.includes(t.id));
+  const activeSubmissions = activeStage
+    ? progress?.stageSubmissions?.[activeStage.id] ?? {}
+    : {};
+  // Slots the current stage still needs filled.
+  const unfilledTradeIds = useMemo(
+    () => requiredTradeIds.filter((tid) => !activeSubmissions[tid]),
+    [requiredTradeIds, activeSubmissions],
+  );
 
-  // A stage may list multiple trades — any contractor that carries at least
-  // one of them is eligible. If no trade is wired up, fall back to every
-  // contractor so the demo isn't blocked.
+  // A contractor is eligible if they carry at least one of the unfilled
+  // slots — that's the rule "any contractor of any matching trade can submit".
   const eligibleContractors = useMemo(() => {
     if (requiredTradeIds.length === 0) return contractors;
+    if (unfilledTradeIds.length === 0) return [];
     return contractors.filter((c) =>
-      c.tradeIds.some((tid) => requiredTradeIds.includes(tid)),
+      c.tradeIds.some((tid) => unfilledTradeIds.includes(tid)),
     );
-  }, [contractors, requiredTradeIds]);
+  }, [contractors, requiredTradeIds, unfilledTradeIds]);
 
-  // Reset selected contractor when the pool changes (new flat, new stage).
+  // For the chosen contractor: which still-unfilled trade slots can they
+  // submit against?
+  const availableSubmitTradeIds = useMemo(() => {
+    const c = contractors.find((x) => x.id === contractorId);
+    if (!c) return [];
+    if (requiredTradeIds.length === 0) {
+      // free-form: let them submit under any of their own trades
+      return c.tradeIds;
+    }
+    return c.tradeIds.filter((tid) => unfilledTradeIds.includes(tid));
+  }, [contractors, contractorId, requiredTradeIds, unfilledTradeIds]);
+
+  // Reset contractor when the active stage (and so the eligible pool) changes.
   useEffect(() => {
     if (!eligibleContractors.find((c) => c.id === contractorId)) {
       setContractorId(eligibleContractors[0]?.id ?? "");
     }
   }, [eligibleContractors, contractorId]);
 
+  // Keep trade slot selection in sync with the contractor's available slots.
+  useEffect(() => {
+    if (!availableSubmitTradeIds.includes(submitTradeId)) {
+      setSubmitTradeId(availableSubmitTradeIds[0] ?? "");
+    }
+  }, [availableSubmitTradeIds, submitTradeId]);
+
   const tradeName = (id) => trades.find((t) => t.id === id)?.name ?? "—";
-  const tradeNamesFor = (ids) =>
-    (ids ?? []).map((id) => tradeName(id)).filter(Boolean);
   const contractorLabel = (id) => {
     const c = contractors.find((x) => x.id === id);
     return c ? `${c.name}${c.company ? ` · ${c.company}` : ""}` : "Unknown";
   };
-  // Which trades does the contractor have that match the stage requirement?
-  // We surface this so the demo shows *why* a particular contractor is eligible.
-  const matchingTradesFor = (contractor, stageTradeIds) => {
-    if (!contractor || !stageTradeIds?.length) return [];
-    return contractor.tradeIds.filter((t) => stageTradeIds.includes(t));
-  };
 
   const completionsByStage = useMemo(() => {
+    // Aggregate completions per stage — used by the stage timeline below.
     const m = {};
     (progress?.completions ?? []).forEach((c) => {
-      m[c.stageId] = c;
+      if (!m[c.stageId]) m[c.stageId] = [];
+      m[c.stageId].push(c);
     });
     return m;
   }, [progress]);
@@ -87,11 +108,18 @@ export function Handover() {
     [handovers, flat?.id],
   );
 
+  // Stage progress fraction for the headline pill.
+  const slotCount = requiredTradeIds.length || 1;
+  const filledCount = requiredTradeIds.length > 0
+    ? requiredTradeIds.filter((t) => activeSubmissions[t]).length
+    : Object.keys(activeSubmissions).length;
+  const stagePct = Math.round((filledCount / slotCount) * 100);
+
   return (
     <div className="space-y-5">
       <PageHeader
         title="Handover"
-        description="The core demo. Pick a flat, see its active stage and required trade, choose the contractor who finished the work, and hand the flat over to the next stage."
+        description="Pick a flat, see its active stage's per-trade checklist, and submit one trade slot at a time. A stage only advances once every linked trade has been handed over — each trade contributes 1/N of the stage's progress."
       />
 
       <Card title="Pick site & flat">
@@ -157,90 +185,178 @@ export function Handover() {
           ) : (
             <div className="grid gap-4 md:grid-cols-[1fr,260px]">
               <div className="rounded-lg border border-brand-200 bg-brand-50/50 p-4">
-                <div className="text-[11px] font-semibold uppercase tracking-wider text-brand-700">
-                  Active stage
-                </div>
-                <div className="mt-1 text-lg font-semibold text-ink">
-                  {activeStage.name}
-                </div>
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-600">
-                  <span>Accepted trades:</span>
-                  {requiredTrades.length === 0 ? (
-                    <Pill tone="rose">no trade linked — wire one up in Configuration</Pill>
-                  ) : (
-                    <>
-                      {requiredTrades.map((t) => (
-                        <Pill key={t.id} tone="blue">
-                          {t.name}
-                        </Pill>
-                      ))}
-                      <span className="text-[11px] text-slate-400">
-                        (any one is enough)
-                      </span>
-                    </>
-                  )}
-                </div>
-
-                <div className="mt-4">
-                  <label className="mb-1 block text-[11px] font-medium text-slate-500">
-                    Contractor that performed the work
-                  </label>
-                  {eligibleContractors.length === 0 ? (
-                    <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                      No contractor carries any of the accepted trades. Tag a
-                      contractor on the Contractors page.
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-wider text-brand-700">
+                      Active stage
                     </div>
+                    <div className="mt-1 text-lg font-semibold text-ink">
+                      {activeStage.name}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-2xl font-semibold text-brand-700">
+                      {stagePct}%
+                    </div>
+                    <div className="text-[11px] text-slate-500">
+                      {filledCount} of {slotCount} trades submitted
+                    </div>
+                  </div>
+                </div>
+
+                {/* Per-slot bar */}
+                <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-white ring-1 ring-brand-200">
+                  {Array.from({ length: slotCount }).map((_, i) => (
+                    <div
+                      key={i}
+                      className={`flex-1 ${
+                        i < filledCount ? "bg-emerald-500" : "bg-transparent"
+                      } ${i > 0 ? "border-l border-white" : ""}`}
+                    />
+                  ))}
+                </div>
+
+                {/* Required-trade checklist */}
+                <div className="mt-4">
+                  <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                    Required trades
+                  </div>
+                  {requiredTradeIds.length === 0 ? (
+                    <Pill tone="rose">
+                      no trade linked — wire one up in Configuration
+                    </Pill>
                   ) : (
-                    <>
-                      <Select
-                        value={contractorId}
-                        onChange={(e) => setContractorId(e.target.value)}
-                      >
-                        {eligibleContractors.map((c) => {
-                          const matches = matchingTradesFor(c, requiredTradeIds)
-                            .map((id) => tradeName(id))
-                            .join(", ");
-                          return (
-                            <option key={c.id} value={c.id}>
-                              {c.name}
-                              {c.company ? ` — ${c.company}` : ""}
-                              {matches ? ` (${matches})` : ""}
-                            </option>
-                          );
-                        })}
-                      </Select>
-                      {contractorId && (
-                        <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[11px] text-slate-500">
-                          <span>submitting as:</span>
-                          {matchingTradesFor(
-                            contractors.find((c) => c.id === contractorId),
-                            requiredTradeIds,
-                          ).map((tid) => (
-                            <Pill key={tid} tone="green">
+                    <ul className="space-y-1.5">
+                      {requiredTradeIds.map((tid) => {
+                        const sub = activeSubmissions[tid];
+                        return (
+                          <li
+                            key={tid}
+                            className={`flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs ${
+                              sub
+                                ? "border-emerald-200 bg-emerald-50/60"
+                                : "border-slate-200 bg-white"
+                            }`}
+                          >
+                            <span
+                              className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold ${
+                                sub
+                                  ? "bg-emerald-500 text-white"
+                                  : "bg-slate-100 text-slate-500"
+                              }`}
+                            >
+                              {sub ? "✓" : "○"}
+                            </span>
+                            <span className="font-medium text-ink">
                               {tradeName(tid)}
-                            </Pill>
-                          ))}
-                        </div>
-                      )}
-                    </>
+                            </span>
+                            {sub ? (
+                              <span className="ml-auto text-[11px] text-slate-500">
+                                {contractorLabel(sub.contractorId)} ·{" "}
+                                {formatTime(sub.at)}
+                              </span>
+                            ) : (
+                              <span className="ml-auto text-[11px] text-slate-400">
+                                pending
+                              </span>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
                   )}
                 </div>
 
-                <div className="mt-4 flex items-center gap-3">
-                  <Button
-                    variant="success"
-                    disabled={!contractorId}
-                    onClick={() => completeActiveStage(flat.id, contractorId)}
-                  >
-                    ✓ Mark stage complete &amp; handover →
-                  </Button>
-                  <span className="text-[11px] text-slate-500">
-                    Advances to{" "}
-                    <strong>
-                      {stages[activeIdx + 1]?.name ?? "completion"}
-                    </strong>
-                  </span>
-                </div>
+                {/* Submission form */}
+                {unfilledTradeIds.length > 0 && (
+                  <div className="mt-4 space-y-3 rounded-md border border-slate-200 bg-white p-3">
+                    <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                      Submit next trade
+                    </div>
+                    {eligibleContractors.length === 0 ? (
+                      <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                        No contractor carries any of the pending trades. Tag a
+                        contractor on the Contractors page.
+                      </div>
+                    ) : (
+                      <>
+                        <div>
+                          <label className="mb-1 block text-[11px] font-medium text-slate-500">
+                            Contractor
+                          </label>
+                          <Select
+                            value={contractorId}
+                            onChange={(e) => setContractorId(e.target.value)}
+                          >
+                            {eligibleContractors.map((c) => {
+                              const matches = c.tradeIds
+                                .filter((tid) =>
+                                  unfilledTradeIds.includes(tid),
+                                )
+                                .map(tradeName)
+                                .join(", ");
+                              return (
+                                <option key={c.id} value={c.id}>
+                                  {c.name}
+                                  {c.company ? ` — ${c.company}` : ""}
+                                  {matches ? ` (${matches})` : ""}
+                                </option>
+                              );
+                            })}
+                          </Select>
+                        </div>
+
+                        {availableSubmitTradeIds.length > 1 && (
+                          <div>
+                            <label className="mb-1 block text-[11px] font-medium text-slate-500">
+                              Submitting under trade
+                            </label>
+                            <Select
+                              value={submitTradeId}
+                              onChange={(e) =>
+                                setSubmitTradeId(e.target.value)
+                              }
+                            >
+                              {availableSubmitTradeIds.map((tid) => (
+                                <option key={tid} value={tid}>
+                                  {tradeName(tid)}
+                                </option>
+                              ))}
+                            </Select>
+                          </div>
+                        )}
+
+                        <div className="flex flex-wrap items-center gap-3">
+                          <Button
+                            variant="success"
+                            disabled={!contractorId || !submitTradeId}
+                            onClick={() =>
+                              completeActiveStage(
+                                flat.id,
+                                contractorId,
+                                submitTradeId,
+                              )
+                            }
+                          >
+                            ✓ Submit handover{" "}
+                            {submitTradeId
+                              ? `(${tradeName(submitTradeId)})`
+                              : ""}
+                          </Button>
+                          <span className="text-[11px] text-slate-500">
+                            {filledCount + 1 >= slotCount
+                              ? `Final slot — completes stage, advances to ${
+                                  stages[activeIdx + 1]?.name ?? "completion"
+                                }`
+                              : `Stage stays active — ${
+                                  slotCount - filledCount - 1
+                                } more trade(s) needed`}
+                          </span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="rounded-lg border border-slate-200 bg-white p-4">
@@ -254,14 +370,17 @@ export function Handover() {
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-slate-500">
                       <span>Trades:</span>
-                      {(stageTradeMap[stages[activeIdx + 1].id] ?? []).length === 0 ? (
+                      {(stageTradeMap[stages[activeIdx + 1].id] ?? []).length ===
+                      0 ? (
                         <Pill tone="rose">none</Pill>
                       ) : (
-                        (stageTradeMap[stages[activeIdx + 1].id] ?? []).map((tid) => (
-                          <Pill key={tid} tone="slate">
-                            {tradeName(tid)}
-                          </Pill>
-                        ))
+                        (stageTradeMap[stages[activeIdx + 1].id] ?? []).map(
+                          (tid) => (
+                            <Pill key={tid} tone="slate">
+                              {tradeName(tid)}
+                            </Pill>
+                          ),
+                        )
                       )}
                     </div>
                   </>
@@ -281,10 +400,15 @@ export function Handover() {
             </div>
             <ol className="space-y-1.5">
               {stages.map((s, i) => {
-                const completion = completionsByStage[s.id];
+                const subs = progress?.stageSubmissions?.[s.id] ?? {};
+                const stageCompletions = completionsByStage[s.id] ?? [];
                 const isActive = i === activeIdx;
                 const isDone = i < activeIdx;
                 const tradeIds = stageTradeMap[s.id] ?? [];
+                const total = tradeIds.length || 1;
+                const filled = tradeIds.length > 0
+                  ? tradeIds.filter((t) => subs[t]).length
+                  : Object.keys(subs).length;
                 return (
                   <li
                     key={s.id}
@@ -315,19 +439,24 @@ export function Handover() {
                         <Pill tone="rose">no trade</Pill>
                       ) : (
                         tradeIds.map((tid) => (
-                          <Pill key={tid} tone="slate">
+                          <Pill
+                            key={tid}
+                            tone={subs[tid] ? "green" : "slate"}
+                          >
+                            {subs[tid] ? "✓ " : ""}
                             {tradeName(tid)}
                           </Pill>
                         ))
                       )}
                     </div>
-                    {isDone && completion ? (
+                    {isDone ? (
                       <span className="hidden md:inline text-[11px] text-slate-500">
-                        by {contractorLabel(completion.contractorId)} ·{" "}
-                        {formatTime(completion.at)}
+                        {stageCompletions.length} submission(s)
                       </span>
                     ) : isActive ? (
-                      <Pill tone="blue">active</Pill>
+                      <Pill tone="blue">
+                        {filled}/{total} done
+                      </Pill>
                     ) : (
                       <span className="text-[11px] text-slate-400">queued</span>
                     )}
@@ -351,13 +480,14 @@ export function Handover() {
         {!flat ? (
           <EmptyHint>Pick a flat to see its handover events.</EmptyHint>
         ) : flatHandovers.length === 0 ? (
-          <EmptyHint>No handovers yet — complete the active stage to start.</EmptyHint>
+          <EmptyHint>
+            No submissions yet — fill the first trade slot above.
+          </EmptyHint>
         ) : (
           <ul className="space-y-2">
             {flatHandovers.map((h) => {
-              const fromStage = stages.find((s) => s.id === h.fromStageId);
-              const toStage = stages.find((s) => s.id === h.toStageId);
-              const toTradeLabel = tradeNamesFor(h.toTradeIds).join(" / ") || "—";
+              const stage = stages.find((s) => s.id === h.stageId);
+              const nextStage = stages.find((s) => s.id === h.nextStageId);
               return (
                 <li
                   key={h.id}
@@ -366,18 +496,33 @@ export function Handover() {
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-slate-400">{formatTime(h.at)}</span>
                     <Pill tone="green">{contractorLabel(h.contractorId)}</Pill>
-                    <span className="text-slate-500">completed</span>
-                    <Pill tone="slate">{fromStage?.name ?? "?"}</Pill>
-                    {toStage ? (
-                      <>
-                        <span className="text-slate-400">→ handover to</span>
-                        <Pill tone="blue">{toStage.name}</Pill>
-                        <span className="text-slate-500">({toTradeLabel})</span>
-                      </>
+                    <span className="text-slate-500">submitted</span>
+                    <Pill tone="blue">{tradeName(h.tradeId)}</Pill>
+                    <span className="text-slate-500">for</span>
+                    <Pill tone="slate">{stage?.name ?? "?"}</Pill>
+                    {h.stageAdvanced ? (
+                      nextStage ? (
+                        <>
+                          <span className="text-slate-400">
+                            → stage complete · handover to
+                          </span>
+                          <Pill tone="blue">{nextStage.name}</Pill>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-slate-400">→</span>
+                          <Pill tone="green">flat complete</Pill>
+                        </>
+                      )
                     ) : (
                       <>
                         <span className="text-slate-400">→</span>
-                        <Pill tone="green">flat complete</Pill>
+                        <Pill tone="amber">
+                          {h.filledCount}/{h.slotCount} done · waiting for{" "}
+                          {h.pendingTradeIds
+                            .map(tradeName)
+                            .join(", ")}
+                        </Pill>
                       </>
                     )}
                   </div>

@@ -75,12 +75,18 @@ export const initialSites = [
   ),
 ];
 
-// flatProgress: { [flatId]: { activeStageIdx, completions: [{ stageId, contractorId, at }] } }
-// Default: every flat starts at stage 0 with no completions.
+// flatProgress[flatId] = {
+//   activeStageIdx,
+//   completions: [{ stageId, tradeId, contractorId, at }],
+//   stageSubmissions: { [stageId]: { [tradeId]: { contractorId, at } } }
+// }
+// A stage with N linked trades requires N per-trade submissions before it
+// advances. completions is a flat append-only log; stageSubmissions is the
+// per-slot map the UI reads from.
 export const buildInitialProgress = (sites) => {
   const m = {};
   sites.forEach((s) => s.flats.forEach((f) => {
-    m[f.id] = { activeStageIdx: 0, completions: [] };
+    m[f.id] = { activeStageIdx: 0, completions: [], stageSubmissions: {} };
   }));
   return m;
 };

@@ -172,39 +172,73 @@ export function AppProvider({ children }) {
   //   2. Log a handover entry showing the trade hand-off to the next stage.
   //   3. Advance the flat's activeStageIdx by one (so the next stage becomes
   //      active and its required trade defines the next dropdown).
+  // Submit a single trade slot for the flat's currently-active stage.
+  //   - The slot is keyed by (stageId, tradeId).
+  //   - The stage only advances when every required trade has a submission.
+  //   - If the stage has no trades configured we treat it as a 1-slot stage
+  //     so the demo isn't blocked.
   const completeActiveStage = useCallback(
-    (flatId, contractorId) => {
+    (flatId, contractorId, tradeId) => {
       const progress = flatProgress[flatId];
       if (!progress) return;
       const idx = progress.activeStageIdx;
-      if (idx >= stages.length) return; // already finished
+      if (idx >= stages.length) return;
       const currentStage = stages[idx];
-      const nextStage = stages[idx + 1];
+      const required = stageTradeMap[currentStage.id] ?? [];
+
+      // Reject obviously-invalid submissions so the log stays clean.
+      if (required.length > 0 && !required.includes(tradeId)) return;
+      const existingSubs = progress.stageSubmissions?.[currentStage.id] ?? {};
+      if (existingSubs[tradeId]) return; // slot already filled
 
       const nowIso = new Date().toISOString();
+      const newSubsForStage = {
+        ...existingSubs,
+        [tradeId]: { contractorId, at: nowIso },
+      };
+      const slotCount = required.length || 1;
+      const filledCount = required.length > 0
+        ? required.filter((t) => newSubsForStage[t]).length
+        : Object.keys(newSubsForStage).length;
+      const stageComplete = filledCount >= slotCount;
+      const nextStage = stageComplete ? stages[idx + 1] : null;
+      const pendingTradeIds = required.filter((t) => !newSubsForStage[t]);
+
       setFlatProgress((fp) => {
-        const prev = fp[flatId] ?? { activeStageIdx: 0, completions: [] };
+        const prev = fp[flatId] ?? {
+          activeStageIdx: 0, completions: [], stageSubmissions: {},
+        };
         return {
           ...fp,
           [flatId]: {
-            activeStageIdx: Math.min(prev.activeStageIdx + 1, stages.length),
+            activeStageIdx: stageComplete
+              ? Math.min(prev.activeStageIdx + 1, stages.length)
+              : prev.activeStageIdx,
             completions: [
               ...prev.completions,
-              { stageId: currentStage.id, contractorId, at: nowIso },
+              { stageId: currentStage.id, tradeId, contractorId, at: nowIso },
             ],
+            stageSubmissions: {
+              ...prev.stageSubmissions,
+              [currentStage.id]: newSubsForStage,
+            },
           },
         };
       });
+
       setHandovers((hs) => [
         {
           id: uid("hov"),
           at: nowIso,
           flatId,
-          fromStageId: currentStage.id,
-          toStageId: nextStage?.id ?? null,
-          fromTradeIds: stageTradeMap[currentStage.id] ?? [],
-          toTradeIds: nextStage ? stageTradeMap[nextStage.id] ?? [] : [],
+          stageId: currentStage.id,
+          tradeId,
           contractorId,
+          stageAdvanced: stageComplete,
+          filledCount,
+          slotCount,
+          pendingTradeIds,
+          nextStageId: nextStage?.id ?? null,
         },
         ...hs,
       ]);
