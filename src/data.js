@@ -23,12 +23,20 @@ export const initialStages = [
   stage("Decoration Final"),
 ];
 
-// stageTradeMap: { [stageId]: tradeId | null }
+// stageTradeMap: { [stageId]: tradeId[] }  — many-to-many; a stage can
+// accept work from contractors of any listed trade.
 export const initialStageTradeMap = (() => {
   const m = {};
   initialStages.forEach((s, i) => {
-    m[s.id] = initialTrades[i]?.id ?? null;
+    const primary = initialTrades[i]?.id;
+    m[s.id] = primary ? [primary] : [];
   });
+  // Seed one stage with two trades so the multi-trade case shows up out of
+  // the box — "First Fix M&E" can be handed over by either M&E or Drylining.
+  const firstFix = initialStages[1];
+  if (firstFix && initialTrades[0] && !m[firstFix.id].includes(initialTrades[0].id)) {
+    m[firstFix.id] = [...m[firstFix.id], initialTrades[0].id];
+  }
   return m;
 })();
 

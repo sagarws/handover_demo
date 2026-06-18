@@ -40,16 +40,18 @@ export function Handover() {
   const activeStage = stages[activeIdx];
   const finished = !activeStage;
 
-  const requiredTradeId = activeStage ? stageTradeMap[activeStage.id] : null;
-  const requiredTrade = trades.find((t) => t.id === requiredTradeId);
+  const requiredTradeIds = activeStage ? stageTradeMap[activeStage.id] ?? [] : [];
+  const requiredTrades = trades.filter((t) => requiredTradeIds.includes(t.id));
 
-  // Contractors who are tagged with the active stage's required trade — that's
-  // the dropdown the user requested. If no trade is wired up, fall back to
-  // every contractor so the demo isn't blocked.
+  // A stage may list multiple trades — any contractor that carries at least
+  // one of them is eligible. If no trade is wired up, fall back to every
+  // contractor so the demo isn't blocked.
   const eligibleContractors = useMemo(() => {
-    if (!requiredTradeId) return contractors;
-    return contractors.filter((c) => c.tradeIds.includes(requiredTradeId));
-  }, [contractors, requiredTradeId]);
+    if (requiredTradeIds.length === 0) return contractors;
+    return contractors.filter((c) =>
+      c.tradeIds.some((tid) => requiredTradeIds.includes(tid)),
+    );
+  }, [contractors, requiredTradeIds]);
 
   // Reset selected contractor when the pool changes (new flat, new stage).
   useEffect(() => {
@@ -59,9 +61,17 @@ export function Handover() {
   }, [eligibleContractors, contractorId]);
 
   const tradeName = (id) => trades.find((t) => t.id === id)?.name ?? "—";
+  const tradeNamesFor = (ids) =>
+    (ids ?? []).map((id) => tradeName(id)).filter(Boolean);
   const contractorLabel = (id) => {
     const c = contractors.find((x) => x.id === id);
     return c ? `${c.name}${c.company ? ` · ${c.company}` : ""}` : "Unknown";
+  };
+  // Which trades does the contractor have that match the stage requirement?
+  // We surface this so the demo shows *why* a particular contractor is eligible.
+  const matchingTradesFor = (contractor, stageTradeIds) => {
+    if (!contractor || !stageTradeIds?.length) return [];
+    return contractor.tradeIds.filter((t) => stageTradeIds.includes(t));
   };
 
   const completionsByStage = useMemo(() => {
@@ -154,11 +164,20 @@ export function Handover() {
                   {activeStage.name}
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-600">
-                  <span>Required trade:</span>
-                  {requiredTrade ? (
-                    <Pill tone="blue">{requiredTrade.name}</Pill>
-                  ) : (
+                  <span>Accepted trades:</span>
+                  {requiredTrades.length === 0 ? (
                     <Pill tone="rose">no trade linked — wire one up in Configuration</Pill>
+                  ) : (
+                    <>
+                      {requiredTrades.map((t) => (
+                        <Pill key={t.id} tone="blue">
+                          {t.name}
+                        </Pill>
+                      ))}
+                      <span className="text-[11px] text-slate-400">
+                        (any one is enough)
+                      </span>
+                    </>
                   )}
                 </div>
 
@@ -168,21 +187,42 @@ export function Handover() {
                   </label>
                   {eligibleContractors.length === 0 ? (
                     <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                      No contractor has the “{requiredTrade?.name ?? "required"}”
-                      trade. Add or tag one on the Contractors page.
+                      No contractor carries any of the accepted trades. Tag a
+                      contractor on the Contractors page.
                     </div>
                   ) : (
-                    <Select
-                      value={contractorId}
-                      onChange={(e) => setContractorId(e.target.value)}
-                    >
-                      {eligibleContractors.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                          {c.company ? ` — ${c.company}` : ""}
-                        </option>
-                      ))}
-                    </Select>
+                    <>
+                      <Select
+                        value={contractorId}
+                        onChange={(e) => setContractorId(e.target.value)}
+                      >
+                        {eligibleContractors.map((c) => {
+                          const matches = matchingTradesFor(c, requiredTradeIds)
+                            .map((id) => tradeName(id))
+                            .join(", ");
+                          return (
+                            <option key={c.id} value={c.id}>
+                              {c.name}
+                              {c.company ? ` — ${c.company}` : ""}
+                              {matches ? ` (${matches})` : ""}
+                            </option>
+                          );
+                        })}
+                      </Select>
+                      {contractorId && (
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[11px] text-slate-500">
+                          <span>submitting as:</span>
+                          {matchingTradesFor(
+                            contractors.find((c) => c.id === contractorId),
+                            requiredTradeIds,
+                          ).map((tid) => (
+                            <Pill key={tid} tone="green">
+                              {tradeName(tid)}
+                            </Pill>
+                          ))}
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
 
@@ -212,9 +252,17 @@ export function Handover() {
                     <div className="mt-1 text-sm font-medium text-ink">
                       {stages[activeIdx + 1].name}
                     </div>
-                    <div className="mt-1 text-[11px] text-slate-500">
-                      Trade:{" "}
-                      {tradeName(stageTradeMap[stages[activeIdx + 1].id]) ?? "—"}
+                    <div className="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-slate-500">
+                      <span>Trades:</span>
+                      {(stageTradeMap[stages[activeIdx + 1].id] ?? []).length === 0 ? (
+                        <Pill tone="rose">none</Pill>
+                      ) : (
+                        (stageTradeMap[stages[activeIdx + 1].id] ?? []).map((tid) => (
+                          <Pill key={tid} tone="slate">
+                            {tradeName(tid)}
+                          </Pill>
+                        ))
+                      )}
                     </div>
                   </>
                 ) : (
@@ -236,10 +284,11 @@ export function Handover() {
                 const completion = completionsByStage[s.id];
                 const isActive = i === activeIdx;
                 const isDone = i < activeIdx;
+                const tradeIds = stageTradeMap[s.id] ?? [];
                 return (
                   <li
                     key={s.id}
-                    className={`flex items-center gap-3 rounded-md border px-3 py-2 ${
+                    className={`flex flex-wrap items-center gap-2 rounded-md border px-3 py-2 ${
                       isActive
                         ? "border-brand-300 bg-brand-50/60"
                         : isDone
@@ -261,9 +310,17 @@ export function Handover() {
                     <span className="flex-1 text-sm font-medium text-ink">
                       {s.name}
                     </span>
-                    <Pill tone={stageTradeMap[s.id] ? "slate" : "rose"}>
-                      {tradeName(stageTradeMap[s.id])}
-                    </Pill>
+                    <div className="flex flex-wrap gap-1">
+                      {tradeIds.length === 0 ? (
+                        <Pill tone="rose">no trade</Pill>
+                      ) : (
+                        tradeIds.map((tid) => (
+                          <Pill key={tid} tone="slate">
+                            {tradeName(tid)}
+                          </Pill>
+                        ))
+                      )}
+                    </div>
                     {isDone && completion ? (
                       <span className="hidden md:inline text-[11px] text-slate-500">
                         by {contractorLabel(completion.contractorId)} ·{" "}
@@ -300,6 +357,7 @@ export function Handover() {
             {flatHandovers.map((h) => {
               const fromStage = stages.find((s) => s.id === h.fromStageId);
               const toStage = stages.find((s) => s.id === h.toStageId);
+              const toTradeLabel = tradeNamesFor(h.toTradeIds).join(" / ") || "—";
               return (
                 <li
                   key={h.id}
@@ -314,9 +372,7 @@ export function Handover() {
                       <>
                         <span className="text-slate-400">→ handover to</span>
                         <Pill tone="blue">{toStage.name}</Pill>
-                        <span className="text-slate-500">
-                          ({tradeName(h.toTradeId)})
-                        </span>
+                        <span className="text-slate-500">({toTradeLabel})</span>
                       </>
                     ) : (
                       <>

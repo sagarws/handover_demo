@@ -89,24 +89,27 @@ export function ProgressMatrix() {
                     <th className="sticky left-0 z-10 bg-white px-2 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                       Flat
                     </th>
-                    {stages.map((s, i) => (
-                      <th
-                        key={s.id}
-                        className="px-1 py-2 text-center align-bottom"
-                      >
-                        <div className="mb-1 text-[10px] font-semibold text-slate-500">
-                          {i + 1}
-                        </div>
-                        <div className="rotate-[-20deg] origin-bottom whitespace-nowrap text-[10px] font-medium text-slate-700">
-                          {s.name}
-                        </div>
-                        {stageTradeMap[s.id] && (
-                          <div className="mt-1 text-[9px] text-slate-400">
-                            {tradeName(stageTradeMap[s.id])}
+                    {stages.map((s, i) => {
+                      const ids = stageTradeMap[s.id] ?? [];
+                      return (
+                        <th
+                          key={s.id}
+                          className="px-1 py-2 text-center align-bottom"
+                        >
+                          <div className="mb-1 text-[10px] font-semibold text-slate-500">
+                            {i + 1}
                           </div>
-                        )}
-                      </th>
-                    ))}
+                          <div className="rotate-[-20deg] origin-bottom whitespace-nowrap text-[10px] font-medium text-slate-700">
+                            {s.name}
+                          </div>
+                          {ids.length > 0 && (
+                            <div className="mt-1 text-[9px] leading-tight text-slate-400">
+                              {ids.map(tradeName).join(" / ")}
+                            </div>
+                          )}
+                        </th>
+                      );
+                    })}
                   </tr>
                 </thead>
                 <tbody>

@@ -122,7 +122,7 @@ function StagesCard() {
   const [editingId, setEditingId] = useState(null);
   const [editName, setEditName] = useState("");
 
-  const tradeName = (id) => trades.find((t) => t.id === id)?.name;
+  const tradeName = (id) => trades.find((t) => t.id === id)?.name ?? "—";
 
   return (
     <Card
@@ -161,11 +161,11 @@ function StagesCard() {
         ) : (
           <ul className="space-y-1.5">
             {stages.map((s, i) => {
-              const linked = tradeName(stageTradeMap[s.id]);
+              const linkedIds = stageTradeMap[s.id] ?? [];
               return (
                 <li
                   key={s.id}
-                  className="flex items-center gap-2 rounded-md border border-slate-100 bg-slate-50 px-3 py-2"
+                  className="flex flex-wrap items-center gap-2 rounded-md border border-slate-100 bg-slate-50 px-3 py-2"
                 >
                   <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white text-[11px] font-semibold text-slate-500 ring-1 ring-slate-200">
                     {i + 1}
@@ -197,11 +197,17 @@ function StagesCard() {
                   ) : (
                     <>
                       <span className="flex-1 text-sm text-ink">{s.name}</span>
-                      {linked ? (
-                        <Pill tone="blue">{linked}</Pill>
-                      ) : (
-                        <Pill tone="rose">no trade</Pill>
-                      )}
+                      <div className="flex flex-wrap items-center gap-1">
+                        {linkedIds.length === 0 ? (
+                          <Pill tone="rose">no trade</Pill>
+                        ) : (
+                          linkedIds.map((tid) => (
+                            <Pill key={tid} tone="blue">
+                              {tradeName(tid)}
+                            </Pill>
+                          ))
+                        )}
+                      </div>
                       <Button
                         size="sm"
                         variant="ghost"
@@ -252,18 +258,18 @@ function StagesCard() {
 // ---------- drag-and-drop trade ↔ stage relation builder ----------
 
 function RelationBuilder() {
-  const { trades, stages, stageTradeMap, setStageTrade } = useApp();
+  const { trades, stages, stageTradeMap, addStageTrade, removeStageTrade } = useApp();
   const [dragTradeId, setDragTradeId] = useState(null);
   const [overStageId, setOverStageId] = useState(null);
 
-  const tradeOf = (stageId) => trades.find((t) => t.id === stageTradeMap[stageId]);
+  const tradeById = (id) => trades.find((t) => t.id === id);
 
   return (
     <Card
       title="Trade ↔ Stage relations"
       right={
         <span className="text-[11px] text-slate-400">
-          Drag a trade node onto a stage node
+          Drag a trade node onto a stage — multiple trades per stage allowed
         </span>
       }
     >
@@ -311,11 +317,11 @@ function RelationBuilder() {
           {/* Right: stage drop zones */}
           <div>
             <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-              Stages (drop targets)
+              Stages (drop targets · multiple trades allowed)
             </div>
             <ol className="space-y-2">
               {stages.map((s, i) => {
-                const linkedTrade = tradeOf(s.id);
+                const linkedIds = stageTradeMap[s.id] ?? [];
                 const isOver = overStageId === s.id;
                 return (
                   <li
@@ -329,14 +335,14 @@ function RelationBuilder() {
                     onDrop={(e) => {
                       e.preventDefault();
                       const tradeId = e.dataTransfer.getData("text/plain") || dragTradeId;
-                      if (tradeId) setStageTrade(s.id, tradeId);
+                      if (tradeId) addStageTrade(s.id, tradeId);
                       setOverStageId(null);
                       setDragTradeId(null);
                     }}
-                    className={`flex items-center gap-3 rounded-lg border-2 border-dashed bg-white px-3 py-2 transition ${
+                    className={`flex flex-wrap items-center gap-2 rounded-lg border-2 border-dashed bg-white px-3 py-2 transition ${
                       isOver
                         ? "border-brand-500 bg-brand-50"
-                        : linkedTrade
+                        : linkedIds.length
                           ? "border-emerald-200"
                           : "border-slate-200"
                     }`}
@@ -347,22 +353,30 @@ function RelationBuilder() {
                     <span className="flex-1 text-sm font-medium text-ink">
                       {s.name}
                     </span>
-                    {linkedTrade ? (
-                      <>
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
-                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                          {linkedTrade.name}
-                        </span>
-                        <button
-                          onClick={() => setStageTrade(s.id, null)}
-                          className="rounded-md px-2 py-1 text-[11px] text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                          title="Unlink"
-                        >
-                          ✕
-                        </button>
-                      </>
-                    ) : (
+                    {linkedIds.length === 0 ? (
                       <span className="text-[11px] text-slate-400">drop trade here</span>
+                    ) : (
+                      <div className="flex flex-wrap gap-1.5">
+                        {linkedIds.map((tid) => {
+                          const t = tradeById(tid);
+                          return (
+                            <span
+                              key={tid}
+                              className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700"
+                            >
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                              {t?.name ?? "—"}
+                              <button
+                                onClick={() => removeStageTrade(s.id, tid)}
+                                className="ml-0.5 rounded-full text-emerald-700/70 hover:text-rose-600"
+                                title="Unlink this trade"
+                              >
+                                ✕
+                              </button>
+                            </span>
+                          );
+                        })}
+                      </div>
                     )}
                   </li>
                 );

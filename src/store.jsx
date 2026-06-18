@@ -32,9 +32,9 @@ export function AppProvider({ children }) {
   const removeTrade = useCallback((id) => {
     setTrades((ts) => ts.filter((t) => t.id !== id));
     setStageTradeMap((m) => {
-      const next = { ...m };
-      Object.keys(next).forEach((k) => {
-        if (next[k] === id) next[k] = null;
+      const next = {};
+      Object.entries(m).forEach(([k, arr]) => {
+        next[k] = (arr ?? []).filter((tid) => tid !== id);
       });
       return next;
     });
@@ -49,7 +49,7 @@ export function AppProvider({ children }) {
     if (!trimmed) return;
     const newStage = { id: uid("stg"), name: trimmed };
     setStages((ss) => [...ss, newStage]);
-    setStageTradeMap((m) => ({ ...m, [newStage.id]: null }));
+    setStageTradeMap((m) => ({ ...m, [newStage.id]: [] }));
   }, []);
   const renameStage = useCallback((id, name) => {
     setStages((ss) => ss.map((s) => (s.id === id ? { ...s, name } : s)));
@@ -71,8 +71,21 @@ export function AppProvider({ children }) {
       return copy;
     });
   }, []);
-  const setStageTrade = useCallback((stageId, tradeId) => {
-    setStageTradeMap((m) => ({ ...m, [stageId]: tradeId }));
+  // Add a trade to a stage's list (idempotent).
+  const addStageTrade = useCallback((stageId, tradeId) => {
+    if (!tradeId) return;
+    setStageTradeMap((m) => {
+      const curr = m[stageId] ?? [];
+      if (curr.includes(tradeId)) return m;
+      return { ...m, [stageId]: [...curr, tradeId] };
+    });
+  }, []);
+  // Remove a single trade from a stage's list.
+  const removeStageTrade = useCallback((stageId, tradeId) => {
+    setStageTradeMap((m) => {
+      const curr = m[stageId] ?? [];
+      return { ...m, [stageId]: curr.filter((t) => t !== tradeId) };
+    });
   }, []);
 
   // ---------- contractors ----------
@@ -189,8 +202,8 @@ export function AppProvider({ children }) {
           flatId,
           fromStageId: currentStage.id,
           toStageId: nextStage?.id ?? null,
-          fromTradeId: stageTradeMap[currentStage.id] ?? null,
-          toTradeId: nextStage ? stageTradeMap[nextStage.id] ?? null : null,
+          fromTradeIds: stageTradeMap[currentStage.id] ?? [],
+          toTradeIds: nextStage ? stageTradeMap[nextStage.id] ?? [] : [],
           contractorId,
         },
         ...hs,
@@ -205,7 +218,8 @@ export function AppProvider({ children }) {
       trades, stages, stageTradeMap, contractors, sites, flatProgress, handovers,
       // actions
       addTrade, renameTrade, removeTrade,
-      addStage, renameStage, removeStage, moveStage, setStageTrade,
+      addStage, renameStage, removeStage, moveStage,
+      addStageTrade, removeStageTrade,
       addContractor, removeContractor,
       addSite, updateSite, removeSite, addFlat, removeFlat,
       addSiteAccess, removeSiteAccess,
@@ -214,7 +228,8 @@ export function AppProvider({ children }) {
     [
       trades, stages, stageTradeMap, contractors, sites, flatProgress, handovers,
       addTrade, renameTrade, removeTrade,
-      addStage, renameStage, removeStage, moveStage, setStageTrade,
+      addStage, renameStage, removeStage, moveStage,
+      addStageTrade, removeStageTrade,
       addContractor, removeContractor,
       addSite, updateSite, removeSite, addFlat, removeFlat,
       addSiteAccess, removeSiteAccess,
