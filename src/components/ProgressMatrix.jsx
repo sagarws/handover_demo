@@ -6,6 +6,7 @@ const LEGEND = [
   { key: "done", label: "Done", className: "bg-emerald-500" },
   { key: "active", label: "Active (partial)", className: "bg-brand-500" },
   { key: "todo", label: "Not started", className: "bg-slate-200" },
+  { key: "na", label: "N/A for this unit", className: "bg-slate-50 ring-1 ring-slate-200" },
 ];
 
 export function ProgressMatrix() {
@@ -29,18 +30,22 @@ export function ProgressMatrix() {
     return [...m.entries()];
   }, [site]);
 
-  // Roll up all stages of all units including partial credit for the active
-  // stage (e.g. 1/2 of a stage's trades submitted = 0.5 cells done).
+  // Roll up progress over only the stages each unit actually goes through.
+  // Total = sum of |unit.stageIds|, not units × global stages — otherwise
+  // the percentage would be unfairly diluted by N/A cells.
   const stats = useMemo(() => {
     if (!site) return null;
-    const total = site.units.length * stages.length;
+    let total = 0;
     let done = 0;
     let active = 0;
     site.units.forEach((f) => {
       const p = flatProgress[f.id];
       if (!p) return;
-      done += Math.min(p.activeStageIdx, stages.length);
-      const activeStage = stages[p.activeStageIdx];
+      const allowed = new Set(f.stageIds ?? []);
+      const ordered = stages.filter((s) => allowed.has(s.id));
+      total += ordered.length;
+      done += Math.min(p.activeStageIdx, ordered.length);
+      const activeStage = ordered[p.activeStageIdx];
       if (activeStage) {
         const required = stageTradeMap[activeStage.id] ?? [];
         const subs = p.stageSubmissions?.[activeStage.id] ?? {};
@@ -170,32 +175,60 @@ export function ProgressMatrix() {
                         activeStageIdx: 0,
                         stageSubmissions: {},
                       };
-                      const finished = p.activeStageIdx >= stages.length;
+                      // Map global stage id → unit-local index. Missing
+                      // entries identify the N/A cells.
+                      const allowed = new Set(f.stageIds ?? []);
+                      const unitOrder = stages.filter((s) => allowed.has(s.id));
+                      const localIdxByStage = {};
+                      unitOrder.forEach((s, i) => {
+                        localIdxByStage[s.id] = i;
+                      });
+                      const finished =
+                        unitOrder.length > 0 &&
+                        p.activeStageIdx >= unitOrder.length;
                       return (
                         <tr key={f.id} className="hover:bg-slate-50">
                           <td className="sticky left-0 z-10 bg-white px-2 py-2 text-xs font-semibold text-ink">
-                            {f.name}
+                            <div className="flex items-center gap-2">
+                              <span>{f.name}</span>
+                              <span className="text-[10px] font-normal text-slate-400">
+                                {unitOrder.length}/{stages.length} stages
+                              </span>
+                            </div>
                             {finished && (
-                              <Pill tone="green" className="ml-2">
+                              <Pill tone="green" className="mt-1">
                                 completed
                               </Pill>
                             )}
                           </td>
-                          {stages.map((s, i) => (
-                            <td
-                              key={s.id}
-                              className="border-b border-slate-50 p-1 text-center"
-                            >
-                              <Cell
-                                flatProgress={p}
-                                stage={s}
-                                stageIdx={i}
-                                stageTradeMap={stageTradeMap}
-                                tradeName={tradeName}
-                                flatName={f.name}
-                              />
-                            </td>
-                          ))}
+                          {stages.map((s) => {
+                            const localIdx = localIdxByStage[s.id];
+                            const isApplicable = localIdx !== undefined;
+                            return (
+                              <td
+                                key={s.id}
+                                className="border-b border-slate-50 p-1 text-center"
+                              >
+                                {isApplicable ? (
+                                  <Cell
+                                    flatProgress={p}
+                                    stage={s}
+                                    stageIdx={localIdx}
+                                    stageTradeMap={stageTradeMap}
+                                    tradeName={tradeName}
+                                    flatName={f.name}
+                                  />
+                                ) : (
+                                  <div
+                                    className="mx-auto flex h-6 w-10 items-center justify-center rounded-md bg-slate-50 text-[10px] text-slate-300 ring-1 ring-slate-200"
+                                    title={`${f.name} — ${s.name}: N/A for this unit`}
+                                  >
+                                    —
+                                  </div>
+                                )}
+                              </td>
+                            );
+                          })}
                         </tr>
                       );
                     })}

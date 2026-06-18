@@ -5,8 +5,9 @@ import { UNIT_TYPE_SUGGESTIONS } from "../data.js";
 
 export function Sites() {
   const {
-    sites, addSite, updateSite, removeSite,
-    addUnit, removeUnit, addSiteAccess, removeSiteAccess,
+    sites, stages, addSite, updateSite, removeSite,
+    addUnit, removeUnit, setUnitStages,
+    addSiteAccess, removeSiteAccess,
   } = useApp();
   const [draft, setDraft] = useState({ name: "", address: "" });
 
@@ -51,10 +52,14 @@ export function Sites() {
             <SiteRow
               key={s.id}
               site={s}
+              stages={stages}
               onUpdate={(patch) => updateSite(s.id, patch)}
               onDelete={() => removeSite(s.id)}
               onAddUnit={(payload) => addUnit(s.id, payload)}
               onRemoveUnit={(unitId) => removeUnit(s.id, unitId)}
+              onSetUnitStages={(unitId, stageIds) =>
+                setUnitStages(s.id, unitId, stageIds)
+              }
               onAddAccess={(p) => addSiteAccess(s.id, p)}
               onRemoveAccess={(p) => removeSiteAccess(s.id, p)}
             />
@@ -66,8 +71,8 @@ export function Sites() {
 }
 
 function SiteRow({
-  site, onUpdate, onDelete,
-  onAddUnit, onRemoveUnit,
+  site, stages, onUpdate, onDelete,
+  onAddUnit, onRemoveUnit, onSetUnitStages,
   onAddAccess, onRemoveAccess,
 }) {
   const [editing, setEditing] = useState(false);
@@ -75,6 +80,7 @@ function SiteRow({
   const [unitName, setUnitName] = useState("");
   const [unitType, setUnitType] = useState("Flat");
   const [accessName, setAccessName] = useState("");
+  const [stagesUnitId, setStagesUnitId] = useState(null);
 
   // Group units by type so the operator can see at a glance which floors
   // / corridors / staircases exist without having to read each pill.
@@ -192,28 +198,53 @@ function SiteRow({
           {site.units.length === 0 ? (
             <p className="mt-3 text-xs text-slate-400">No units yet.</p>
           ) : (
-            <div className="mt-3 space-y-2">
+            <div className="mt-3 space-y-3">
               {groupKeys.map((type) => (
                 <div key={type}>
                   <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
                     {type} ({grouped[type].length})
                   </div>
-                  <ul className="flex flex-wrap gap-2">
-                    {grouped[type].map((u) => (
-                      <li
-                        key={u.id}
-                        className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs"
-                      >
-                        <span className="font-medium text-ink">{u.name}</span>
-                        <button
-                          className="text-slate-400 hover:text-rose-600"
-                          onClick={() => onRemoveUnit(u.id)}
-                          title="Remove"
+                  <ul className="space-y-1.5">
+                    {grouped[type].map((u) => {
+                      const subset = u.stageIds ?? [];
+                      const open = stagesUnitId === u.id;
+                      return (
+                        <li
+                          key={u.id}
+                          className="rounded-md border border-slate-200 bg-slate-50"
                         >
-                          ✕
-                        </button>
-                      </li>
-                    ))}
+                          <div className="flex items-center gap-2 px-3 py-1.5 text-xs">
+                            <span className="font-medium text-ink">{u.name}</span>
+                            <button
+                              onClick={() => setStagesUnitId(open ? null : u.id)}
+                              className={`ml-auto rounded-md px-2 py-0.5 text-[11px] font-medium transition ${
+                                open
+                                  ? "bg-brand-100 text-brand-700"
+                                  : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100"
+                              }`}
+                              title="Edit stages for this unit"
+                            >
+                              {subset.length}/{stages.length} stages{" "}
+                              <span aria-hidden>{open ? "▲" : "▼"}</span>
+                            </button>
+                            <button
+                              className="rounded-md p-1 text-slate-400 hover:bg-white hover:text-rose-600"
+                              onClick={() => onRemoveUnit(u.id)}
+                              title="Remove unit"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                          {open && (
+                            <StageSelector
+                              stages={stages}
+                              selected={subset}
+                              onChange={(next) => onSetUnitStages(u.id, next)}
+                            />
+                          )}
+                        </li>
+                      );
+                    })}
                   </ul>
                 </div>
               ))}
@@ -272,5 +303,59 @@ function SiteRow({
         </div>
       </div>
     </Card>
+  );
+}
+
+// Inline checkbox list of every global stage. Toggling a checkbox saves
+// immediately — that resets the unit's progress (the store does it) so
+// the active-stage cursor never points at a stage the unit no longer has.
+function StageSelector({ stages, selected, onChange }) {
+  const setHas = (id) => selected.includes(id);
+  const toggle = (id) => {
+    onChange(
+      setHas(id) ? selected.filter((x) => x !== id) : [...selected, id],
+    );
+  };
+  return (
+    <div className="border-t border-slate-200 bg-white px-3 py-2">
+      <div className="mb-1.5 flex items-center justify-between text-[11px] text-slate-500">
+        <span>Tick the stages this unit goes through (in global order).</span>
+        <div className="flex gap-2">
+          <button
+            className="rounded px-1.5 py-0.5 text-[11px] text-slate-500 hover:bg-slate-100"
+            onClick={() => onChange(stages.map((s) => s.id))}
+          >
+            All
+          </button>
+          <button
+            className="rounded px-1.5 py-0.5 text-[11px] text-slate-500 hover:bg-slate-100"
+            onClick={() => onChange([])}
+          >
+            None
+          </button>
+        </div>
+      </div>
+      <ol className="grid gap-1 sm:grid-cols-2">
+        {stages.map((s, i) => (
+          <li key={s.id}>
+            <label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-slate-50">
+              <input
+                type="checkbox"
+                checked={setHas(s.id)}
+                onChange={() => toggle(s.id)}
+                className="h-3.5 w-3.5 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+              />
+              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 text-[10px] font-semibold text-slate-500">
+                {i + 1}
+              </span>
+              <span className="text-ink">{s.name}</span>
+            </label>
+          </li>
+        ))}
+      </ol>
+      <p className="mt-1.5 text-[11px] text-slate-400">
+        Changing the selection resets this unit's progress (stages no longer apply).
+      </p>
+    </div>
   );
 }

@@ -61,6 +61,16 @@ export function AppProvider({ children }) {
       delete next[id];
       return next;
     });
+    // Each unit may reference this stage in its subset — strip it.
+    setSites((ss) =>
+      ss.map((s) => ({
+        ...s,
+        units: s.units.map((u) => ({
+          ...u,
+          stageIds: (u.stageIds ?? []).filter((sid) => sid !== id),
+        })),
+      })),
+    );
   }, []);
   const moveStage = useCallback((idx, dir) => {
     setStages((ss) => {
@@ -124,15 +134,53 @@ export function AppProvider({ children }) {
   const removeSite = useCallback((id) => {
     setSites((ss) => ss.filter((s) => s.id !== id));
   }, []);
-  const addUnit = useCallback((siteId, { name, type }) => {
+  const addUnit = useCallback((siteId, { name, type, stageIds }) => {
     const trimmedName = name.trim();
     const trimmedType = (type || "").trim() || "Flat";
     if (!trimmedName) return;
     const unitId = uid("unt");
+    // Default a new unit to every currently-defined stage. The Sites page
+    // lets the operator trim that subset down per unit later.
+    const effectiveStageIds = stageIds && stageIds.length
+      ? stageIds
+      : stages.map((s) => s.id);
     setSites((ss) =>
       ss.map((s) =>
         s.id === siteId
-          ? { ...s, units: [...s.units, { id: unitId, name: trimmedName, type: trimmedType }] }
+          ? {
+              ...s,
+              units: [
+                ...s.units,
+                {
+                  id: unitId,
+                  name: trimmedName,
+                  type: trimmedType,
+                  stageIds: effectiveStageIds,
+                },
+              ],
+            }
+          : s,
+      ),
+    );
+    setFlatProgress((fp) => ({
+      ...fp,
+      [unitId]: { activeStageIdx: 0, completions: [], stageSubmissions: {} },
+    }));
+  }, [stages]);
+
+  // Replace a unit's stage subset. Resets that unit's progress because the
+  // active-stage cursor is an index into the unit's own filtered stage list;
+  // changing the set would otherwise leave it pointing at a different stage.
+  const setUnitStages = useCallback((siteId, unitId, stageIds) => {
+    setSites((ss) =>
+      ss.map((s) =>
+        s.id === siteId
+          ? {
+              ...s,
+              units: s.units.map((u) =>
+                u.id === unitId ? { ...u, stageIds } : u,
+              ),
+            }
           : s,
       ),
     );
@@ -178,8 +226,10 @@ export function AppProvider({ children }) {
   //   2. Log a handover entry showing the trade hand-off to the next stage.
   //   3. Advance the flat's activeStageIdx by one (so the next stage becomes
   //      active and its required trade defines the next dropdown).
-  // Submit a single trade slot for the flat's currently-active stage.
+  // Submit a single trade slot for the unit's currently-active stage.
   //   - The slot is keyed by (stageId, tradeId).
+  //   - "active stage" indexes into the *unit's own* filtered stage list,
+  //     so units that skip stages walk their own subset in order.
   //   - The stage only advances when every required trade has a submission.
   //   - If the stage has no trades configured we treat it as a 1-slot stage
   //     so the demo isn't blocked.
@@ -187,9 +237,20 @@ export function AppProvider({ children }) {
     (flatId, contractorId, tradeId) => {
       const progress = flatProgress[flatId];
       if (!progress) return;
+      // Walk every site to find this unit and its stage subset. The unit
+      // count is small; a linear search keeps the store shape simple.
+      let unit;
+      for (const s of sites) {
+        unit = s.units.find((u) => u.id === flatId);
+        if (unit) break;
+      }
+      if (!unit) return;
+      const unitStages = stages.filter((s) =>
+        (unit.stageIds ?? []).includes(s.id),
+      );
       const idx = progress.activeStageIdx;
-      if (idx >= stages.length) return;
-      const currentStage = stages[idx];
+      if (idx >= unitStages.length) return;
+      const currentStage = unitStages[idx];
       const required = stageTradeMap[currentStage.id] ?? [];
 
       // Reject obviously-invalid submissions so the log stays clean.
@@ -207,7 +268,7 @@ export function AppProvider({ children }) {
         ? required.filter((t) => newSubsForStage[t]).length
         : Object.keys(newSubsForStage).length;
       const stageComplete = filledCount >= slotCount;
-      const nextStage = stageComplete ? stages[idx + 1] : null;
+      const nextStage = stageComplete ? unitStages[idx + 1] : null;
       const pendingTradeIds = required.filter((t) => !newSubsForStage[t]);
 
       setFlatProgress((fp) => {
@@ -218,7 +279,7 @@ export function AppProvider({ children }) {
           ...fp,
           [flatId]: {
             activeStageIdx: stageComplete
-              ? Math.min(prev.activeStageIdx + 1, stages.length)
+              ? Math.min(prev.activeStageIdx + 1, unitStages.length)
               : prev.activeStageIdx,
             completions: [
               ...prev.completions,
@@ -249,7 +310,7 @@ export function AppProvider({ children }) {
         ...hs,
       ]);
     },
-    [stages, stageTradeMap, flatProgress],
+    [stages, stageTradeMap, flatProgress, sites],
   );
 
   const value = useMemo(
@@ -261,7 +322,7 @@ export function AppProvider({ children }) {
       addStage, renameStage, removeStage, moveStage,
       addStageTrade, removeStageTrade,
       addContractor, removeContractor,
-      addSite, updateSite, removeSite, addUnit, removeUnit,
+      addSite, updateSite, removeSite, addUnit, removeUnit, setUnitStages,
       addSiteAccess, removeSiteAccess,
       completeActiveStage,
     }),
@@ -271,7 +332,7 @@ export function AppProvider({ children }) {
       addStage, renameStage, removeStage, moveStage,
       addStageTrade, removeStageTrade,
       addContractor, removeContractor,
-      addSite, updateSite, removeSite, addUnit, removeUnit,
+      addSite, updateSite, removeSite, addUnit, removeUnit, setUnitStages,
       addSiteAccess, removeSiteAccess,
       completeActiveStage,
     ],

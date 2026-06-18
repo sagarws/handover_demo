@@ -62,7 +62,19 @@ export const UNIT_TYPE_SUGGESTIONS = [
   "Common Area",
 ];
 
-const unit = (name, type = "Flat") => ({ id: uid("unt"), name, type });
+// Default every newly-created unit to the full stage list. Seed corridors
+// and staircases with a deliberately smaller subset so the per-unit
+// difference shows up in the matrix immediately.
+const allStageIds = () => initialStages.map((s) => s.id);
+const stageIdsByIndex = (idxs) =>
+  idxs.map((i) => initialStages[i]?.id).filter(Boolean);
+
+const unit = (name, type = "Flat", stageIds = allStageIds()) => ({
+  id: uid("unt"),
+  name,
+  type,
+  stageIds,
+});
 
 const buildSite = (name, address, units, access) => ({
   id: uid("ste"),
@@ -81,8 +93,10 @@ export const initialSites = [
       unit("A102", "Flat"),
       unit("A103", "Flat"),
       unit("A201", "Flat"),
-      unit("Floor 1 Corridor", "Corridor"),
-      unit("Staircase A", "Staircase"),
+      // Corridor skips Second Fix Carpentry (idx 3) — no carpentry there.
+      unit("Floor 1 Corridor", "Corridor", stageIdsByIndex([0, 1, 2, 4])),
+      // Staircase only needs structural + decoration stages.
+      unit("Staircase A", "Staircase", stageIdsByIndex([0, 2, 4])),
     ],
     ["Sarah Chen (Site Manager)", "Mark Williams (Subcontractor Mgr)"],
   ),

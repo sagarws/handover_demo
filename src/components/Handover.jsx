@@ -36,10 +36,19 @@ export function Handover() {
     }
   }, [site, flatId]);
 
+  // The unit walks only its own stage subset, in the global order. Indexing
+  // into `unitStages` means a unit that skips a global stage simply hops
+  // straight to its next included stage.
+  const unitStages = useMemo(() => {
+    if (!flat) return [];
+    const allowed = new Set(flat.stageIds ?? []);
+    return stages.filter((s) => allowed.has(s.id));
+  }, [flat, stages]);
+
   const progress = flat ? flatProgress[flat.id] : null;
   const activeIdx = progress?.activeStageIdx ?? 0;
-  const activeStage = stages[activeIdx];
-  const finished = !activeStage;
+  const activeStage = unitStages[activeIdx];
+  const finished = unitStages.length > 0 && !activeStage;
 
   const requiredTradeIds = activeStage ? stageTradeMap[activeStage.id] ?? [] : [];
   const activeSubmissions = activeStage
@@ -182,16 +191,23 @@ export function Handover() {
               {flat.name}
               <Pill tone="slate">{flat.type}</Pill>
               <Pill tone={finished ? "green" : "blue"}>
-                {finished
-                  ? "All stages complete"
-                  : `Stage ${activeIdx + 1} of ${stages.length}`}
+                {unitStages.length === 0
+                  ? "No stages selected"
+                  : finished
+                    ? "All stages complete"
+                    : `Stage ${activeIdx + 1} of ${unitStages.length}`}
               </Pill>
             </span>
           }
         >
-          {finished ? (
+          {unitStages.length === 0 ? (
+            <EmptyHint>
+              This unit has no stages selected — open the Sites page and tick
+              the stages it should pass through.
+            </EmptyHint>
+          ) : finished ? (
             <div className="rounded-md bg-emerald-50 px-4 py-6 text-center text-sm text-emerald-700">
-              ✓ Every configured stage for this flat has been handed over.
+              ✓ Every stage on this unit has been handed over.
             </div>
           ) : !activeStage ? (
             <EmptyHint>No stages configured.</EmptyHint>
@@ -359,7 +375,7 @@ export function Handover() {
                           <span className="text-[11px] text-slate-500">
                             {filledCount + 1 >= slotCount
                               ? `Final slot — completes stage, advances to ${
-                                  stages[activeIdx + 1]?.name ?? "completion"
+                                  unitStages[activeIdx + 1]?.name ?? "completion"
                                 }`
                               : `Stage stays active — ${
                                   slotCount - filledCount - 1
@@ -376,18 +392,18 @@ export function Handover() {
                 <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                   Up next
                 </div>
-                {stages[activeIdx + 1] ? (
+                {unitStages[activeIdx + 1] ? (
                   <>
                     <div className="mt-1 text-sm font-medium text-ink">
-                      {stages[activeIdx + 1].name}
+                      {unitStages[activeIdx + 1].name}
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-slate-500">
                       <span>Trades:</span>
-                      {(stageTradeMap[stages[activeIdx + 1].id] ?? []).length ===
+                      {(stageTradeMap[unitStages[activeIdx + 1].id] ?? []).length ===
                       0 ? (
                         <Pill tone="rose">none</Pill>
                       ) : (
-                        (stageTradeMap[stages[activeIdx + 1].id] ?? []).map(
+                        (stageTradeMap[unitStages[activeIdx + 1].id] ?? []).map(
                           (tid) => (
                             <Pill key={tid} tone="slate">
                               {tradeName(tid)}
@@ -399,20 +415,25 @@ export function Handover() {
                   </>
                 ) : (
                   <div className="mt-1 text-sm text-slate-500">
-                    Final stage — completion ends the flat.
+                    Final stage — completion ends this unit.
                   </div>
                 )}
               </div>
             </div>
           )}
 
-          {/* Stage timeline */}
+          {/* Stage timeline — only the stages this unit actually goes through */}
           <div className="mt-5">
-            <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-              Stage timeline
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                Stage timeline · this unit
+              </span>
+              <span className="text-[11px] text-slate-400">
+                {unitStages.length} of {stages.length} global stages selected
+              </span>
             </div>
             <ol className="space-y-1.5">
-              {stages.map((s, i) => {
+              {unitStages.map((s, i) => {
                 const subs = progress?.stageSubmissions?.[s.id] ?? {};
                 const stageCompletions = completionsByStage[s.id] ?? [];
                 const isActive = i === activeIdx;
