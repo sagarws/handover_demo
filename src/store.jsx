@@ -338,8 +338,14 @@ export function AppProvider({ children }) {
       setCategories((cs) =>
         updateCategoryIn(cs, categoryId, (c) => {
           const allowedStageIds = new Set(c.stages.map((s) => s.id));
-          const claimedExisting = (stageIds || []).filter((sid) =>
-            allowedStageIds.has(sid),
+          // Tags are exclusive to one step — silently drop any requested tag
+          // that already belongs to another step.
+          const alreadyAssigned = new Set(
+            (c.steps ?? []).flatMap((st) => st.stageIds),
+          );
+          const claimedExisting = (stageIds || []).filter(
+            (sid) =>
+              allowedStageIds.has(sid) && !alreadyAssigned.has(sid),
           );
           const allClaimed = [
             ...claimedExisting,
@@ -350,13 +356,10 @@ export function AppProvider({ children }) {
           newStageEntries.forEach((s) => {
             stageTradeMap[s.id] = [];
           });
-          // Detach claimed stages from other steps so each tag belongs to one.
-          const claimedSet = new Set(claimedExisting);
-          const steps = (c.steps ?? []).map((st) => ({
-            ...st,
-            stageIds: st.stageIds.filter((sid) => !claimedSet.has(sid)),
-          }));
-          steps.push({ id: newStepId, name: trimmed, stageIds: allClaimed });
+          const steps = [
+            ...(c.steps ?? []),
+            { id: newStepId, name: trimmed, stageIds: allClaimed },
+          ];
           return { ...c, stages, stageTradeMap, steps };
         }),
       );
@@ -415,20 +418,22 @@ export function AppProvider({ children }) {
   const addStepStage = useCallback((categoryId, stepId, stageId) => {
     if (!stepId || !stageId) return;
     setCategories((cs) =>
-      updateCategoryIn(cs, categoryId, (c) => ({
-        ...c,
-        steps: (c.steps ?? []).map((st) => {
-          if (st.id === stepId) {
-            if (st.stageIds.includes(stageId)) return st;
-            return { ...st, stageIds: [...st.stageIds, stageId] };
-          }
-          // Detach from any other step so a tag belongs to one step at a time.
-          return {
-            ...st,
-            stageIds: st.stageIds.filter((sid) => sid !== stageId),
-          };
-        }),
-      })),
+      updateCategoryIn(cs, categoryId, (c) => {
+        // Reject if the tag already belongs to a different step — tags are
+        // exclusive to one step until explicitly detached.
+        const owner = (c.steps ?? []).find((st) =>
+          st.stageIds.includes(stageId),
+        );
+        if (owner && owner.id !== stepId) return c;
+        return {
+          ...c,
+          steps: (c.steps ?? []).map((st) =>
+            st.id === stepId && !st.stageIds.includes(stageId)
+              ? { ...st, stageIds: [...st.stageIds, stageId] }
+              : st,
+          ),
+        };
+      }),
     );
   }, []);
   const removeStepStage = useCallback((categoryId, stepId, stageId) => {
@@ -471,25 +476,28 @@ export function AppProvider({ children }) {
     (categoryId, stageId, toStepId, toIdx = null) => {
       if (!toStepId || !stageId) return;
       setCategories((cs) =>
-        updateCategoryIn(cs, categoryId, (c) => ({
-          ...c,
-          steps: (c.steps ?? []).map((st) => {
-            if (st.id === toStepId) {
-              const cleaned = st.stageIds.filter((sid) => sid !== stageId);
-              const next = cleaned.slice();
+        updateCategoryIn(cs, categoryId, (c) => {
+          // Tags are exclusive to a step. If the tag is already in another
+          // step, reject the move outright — the user must detach first.
+          const owner = (c.steps ?? []).find((st) =>
+            st.stageIds.includes(stageId),
+          );
+          if (owner && owner.id !== toStepId) return c;
+          return {
+            ...c,
+            steps: (c.steps ?? []).map((st) => {
+              if (st.id !== toStepId) return st;
+              if (st.stageIds.includes(stageId)) return st;
+              const next = st.stageIds.slice();
               const safeIdx =
                 toIdx == null || toIdx < 0 || toIdx > next.length
                   ? next.length
                   : toIdx;
               next.splice(safeIdx, 0, stageId);
               return { ...st, stageIds: next };
-            }
-            return {
-              ...st,
-              stageIds: st.stageIds.filter((sid) => sid !== stageId),
-            };
-          }),
-        })),
+            }),
+          };
+        }),
       );
     },
     [],

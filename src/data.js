@@ -13,9 +13,10 @@ let counter = 0;
 export const uid = (prefix = "id") =>
   `${prefix}_${++counter}_${Date.now().toString(36)}`;
 
-// Canonical tag order for a category: walk steps in declared order, then
-// append any tags that aren't yet attached to a step (orphans). This is the
-// order the Progress Matrix and Handover use for both display and progression.
+// Canonical tag order for a category: walk steps in declared order. Tags
+// that aren't attached to any step are intentionally omitted — they only
+// surface in the Configuration page, never in Progress Matrix / Handover /
+// progression. This is the order both display + progression use.
 export const getOrderedStages = (category) => {
   if (!category) return [];
   const stages = category.stages ?? [];
@@ -32,9 +33,6 @@ export const getOrderedStages = (category) => {
       }
     }),
   );
-  stages.forEach((s) => {
-    if (!seen.has(s.id)) ordered.push(s);
-  });
   return ordered;
 };
 

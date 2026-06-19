@@ -462,11 +462,13 @@ function StepBundleBuilder({ category }) {
   const renderTagCard = (s, j, stepId) => {
     const linkedIds = category.stageTradeMap[s.id] ?? [];
     const isEditing = editingTagId === s.id;
+    // Tags are exclusive to a step: only accept drops from the same step
+    // (reorder) — cross-step moves are forbidden, the user must detach first.
     const tagDropTargetable =
       drag?.kind === "tag" &&
       stepId &&
-      // Don't show insertion highlight on the source slot itself
-      !(drag.stepId === stepId && drag.idx === j);
+      drag.stepId === stepId &&
+      !(drag.idx === j);
     const isTagOver =
       tagDropTargetable &&
       overIdx?.kind === "tag" &&
@@ -491,15 +493,14 @@ function StepBundleBuilder({ category }) {
           )
         }
         onDrop={(e) => {
-          if (drag?.kind === "tag" && stepId) {
+          if (
+            drag?.kind === "tag" &&
+            stepId &&
+            drag.stepId === stepId
+          ) {
             e.preventDefault();
             e.stopPropagation();
-            const stageId = drag.stageId;
-            if (drag.stepId === stepId) {
-              reorderStepStage(category.id, stepId, drag.idx, j);
-            } else if (stageId) {
-              moveStageToStep(category.id, stageId, stepId, j);
-            }
+            reorderStepStage(category.id, stepId, drag.idx, j);
             clearDrag();
           }
         }}
@@ -525,7 +526,7 @@ function StepBundleBuilder({ category }) {
             }}
             onDragEnd={clearDrag}
             className="cursor-grab active:cursor-grabbing text-slate-400 select-none"
-            title="Drag to reorder · drop on another step to move"
+            title="Drag to reorder within this step"
           >
             ⋮⋮
           </span>
@@ -776,14 +777,6 @@ function StepBundleBuilder({ category }) {
     const tags = step.stageIds
       .map(stageById)
       .filter(Boolean);
-    // Highlight whole-step body when a tag is being dragged in from another
-    // step (or the unassigned bucket) and no inner tag row has already
-    // claimed the hover.
-    const isStepTagOver =
-      drag?.kind === "tag" &&
-      drag.stepId !== step.id &&
-      overIdx?.kind === "step-tag" &&
-      overIdx.stepId === step.id;
     return (
       <div
         key={step.id}
@@ -792,36 +785,22 @@ function StepBundleBuilder({ category }) {
             e.preventDefault();
             e.dataTransfer.dropEffect = "move";
             setOverIdx({ kind: "step", idx: i });
-          } else if (drag?.kind === "tag" && drag.stepId !== step.id) {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = "move";
-            setOverIdx({ kind: "step-tag", stepId: step.id });
           }
         }}
         onDragLeave={() =>
-          setOverIdx((v) => {
-            if (v?.kind === "step" && v.idx === i) return null;
-            if (v?.kind === "step-tag" && v.stepId === step.id) return null;
-            return v;
-          })
+          setOverIdx((v) =>
+            v?.kind === "step" && v.idx === i ? null : v,
+          )
         }
         onDrop={(e) => {
           if (drag?.kind === "step") {
             e.preventDefault();
             reorderStep(category.id, drag.idx, i);
             clearDrag();
-          } else if (
-            drag?.kind === "tag" &&
-            drag.stepId !== step.id &&
-            drag.stageId
-          ) {
-            e.preventDefault();
-            moveStageToStep(category.id, drag.stageId, step.id);
-            clearDrag();
           }
         }}
         className={`rounded-xl border-2 bg-slate-50/60 p-4 transition ${
-          isStepOver || isStepTagOver
+          isStepOver
             ? "border-brand-500 ring-2 ring-brand-400/40"
             : "border-slate-300"
         } ${drag?.kind === "step" && drag.idx === i ? "opacity-50" : ""}`}
@@ -1111,24 +1090,33 @@ function AddStepModal({ category, onClose, onCreate }) {
                 {category.stages.map((s) => {
                   const on = stageIds.includes(s.id);
                   const owner = assignedTo(s.id);
+                  const disabled = !!owner;
                   return (
                     <label
                       key={s.id}
-                      className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-sm transition ${
-                        on
-                          ? "border-brand-300 bg-brand-50 text-brand-700"
-                          : "border-transparent bg-white text-slate-700 hover:border-brand-200"
+                      title={
+                        disabled
+                          ? `Already in "${owner}" — detach it first`
+                          : undefined
+                      }
+                      className={`flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm transition ${
+                        disabled
+                          ? "cursor-not-allowed border-transparent bg-slate-100 text-slate-400"
+                          : on
+                            ? "cursor-pointer border-brand-300 bg-brand-50 text-brand-700"
+                            : "cursor-pointer border-transparent bg-white text-slate-700 hover:border-brand-200"
                       }`}
                     >
                       <input
                         type="checkbox"
                         checked={on}
-                        onChange={() => toggle(s.id)}
-                        className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                        disabled={disabled}
+                        onChange={() => !disabled && toggle(s.id)}
+                        className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 disabled:cursor-not-allowed"
                       />
                       <span className="flex-1">{s.name}</span>
                       {owner && (
-                        <span className="text-[10px] text-amber-600">
+                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
                           in {owner}
                         </span>
                       )}
