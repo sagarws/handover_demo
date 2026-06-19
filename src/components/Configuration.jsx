@@ -215,10 +215,30 @@ function TagsReferenceCard({ category }) {
         <ul className="space-y-1.5">
           {category.stages.map((s, i) => {
             const step = stepOf(s.id);
+            const draggable = !step;
             return (
               <li
                 key={s.id}
-                className="flex items-center gap-2 rounded-md border border-slate-100 bg-slate-50 px-3 py-2"
+                draggable={draggable}
+                onDragStart={(e) => {
+                  if (!draggable) {
+                    e.preventDefault();
+                    return;
+                  }
+                  e.dataTransfer.effectAllowed = "copy";
+                  e.dataTransfer.setData("application/x-tag-pool", s.id);
+                  e.dataTransfer.setData("text/plain", s.name);
+                }}
+                title={
+                  draggable
+                    ? "Drag onto a step to assign"
+                    : `Already in "${step.name}" — detach it first`
+                }
+                className={`flex items-center gap-2 rounded-md border border-slate-100 bg-slate-50 px-3 py-2 ${
+                  draggable
+                    ? "cursor-grab active:cursor-grabbing"
+                    : "opacity-70"
+                }`}
               >
                 <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-white text-[10px] font-semibold text-slate-500 ring-1 ring-slate-200">
                   {i + 1}
@@ -280,7 +300,18 @@ export function TradesCard({ category }) {
             {category.trades.map((t) => (
               <li
                 key={t.id}
-                className="flex items-center gap-2 rounded-md border border-slate-100 bg-slate-50 px-3 py-2"
+                draggable={editingId !== t.id}
+                onDragStart={(e) => {
+                  if (editingId === t.id) {
+                    e.preventDefault();
+                    return;
+                  }
+                  e.dataTransfer.effectAllowed = "copy";
+                  e.dataTransfer.setData("application/x-trade-pool", t.id);
+                  e.dataTransfer.setData("text/plain", t.name);
+                }}
+                title="Drag onto a tag to link"
+                className="flex items-center gap-2 rounded-md border border-slate-100 bg-slate-50 px-3 py-2 cursor-grab active:cursor-grabbing"
               >
                 {editingId === t.id ? (
                   <>
@@ -338,14 +369,15 @@ function StepBundleBuilder({ category }) {
   const {
     addStage, renameStage, removeStage,
     addStep, renameStep, removeStep, moveStep, reorderStep,
-    removeStepStage, reorderStepStage,
+    addStepStage, removeStepStage, reorderStepStage,
   } = useApp();
   const [editingTagId, setEditingTagId] = useState(null);
   const [editingTagName, setEditingTagName] = useState("");
   const [editingStepId, setEditingStepId] = useState(null);
   const [editingStepName, setEditingStepName] = useState("");
   const [addingTagForStepId, setAddingTagForStepId] = useState(null);
-  const [showAddStep, setShowAddStep] = useState(false);
+  const [addingStep, setAddingStep] = useState(false);
+  const [newStepName, setNewStepName] = useState("");
   // Drag state: kind = 'step' | 'tag'
   const [drag, setDrag] = useState(null);
   const [overIdx, setOverIdx] = useState(null);
@@ -542,6 +574,8 @@ function StepBundleBuilder({ category }) {
     const tags = step.stageIds
       .map(stageById)
       .filter(Boolean);
+    const isPoolTagOver =
+      overIdx?.kind === "pool-tag" && overIdx.stepId === step.id;
     return (
       <div
         key={step.id}
@@ -550,22 +584,35 @@ function StepBundleBuilder({ category }) {
             e.preventDefault();
             e.dataTransfer.dropEffect = "move";
             setOverIdx({ kind: "step", idx: i });
+          } else if (e.dataTransfer.types.includes("application/x-tag-pool")) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "copy";
+            setOverIdx({ kind: "pool-tag", stepId: step.id });
           }
         }}
         onDragLeave={() =>
-          setOverIdx((v) =>
-            v?.kind === "step" && v.idx === i ? null : v,
-          )
+          setOverIdx((v) => {
+            if (v?.kind === "step" && v.idx === i) return null;
+            if (v?.kind === "pool-tag" && v.stepId === step.id) return null;
+            return v;
+          })
         }
         onDrop={(e) => {
           if (drag?.kind === "step") {
             e.preventDefault();
             reorderStep(category.id, drag.idx, i);
             clearDrag();
+            return;
+          }
+          const stageId = e.dataTransfer.getData("application/x-tag-pool");
+          if (stageId) {
+            e.preventDefault();
+            addStepStage(category.id, step.id, stageId);
+            setOverIdx(null);
           }
         }}
         className={`rounded-xl border-2 bg-slate-50/60 p-4 transition ${
-          isStepOver
+          isStepOver || isPoolTagOver
             ? "border-brand-500 ring-2 ring-brand-400/40"
             : "border-slate-300"
         } ${drag?.kind === "step" && drag.idx === i ? "opacity-50" : ""}`}
@@ -750,172 +797,56 @@ function StepBundleBuilder({ category }) {
 
         {steps.map(renderStep)}
 
-        <Button variant="secondary" onClick={() => setShowAddStep(true)}>
-          + Add step
-        </Button>
-      </div>
-
-      {showAddStep && (
-        <AddStepModal
-          category={category}
-          onClose={() => setShowAddStep(false)}
-          onCreate={({ name, stageIds, newStageNames }) => {
-            addStep(category.id, { name, stageIds, newStageNames });
-            setShowAddStep(false);
-          }}
-        />
-      )}
-    </Card>
-  );
-}
-
-function AddStepModal({ category, onClose, onCreate }) {
-  const [name, setName] = useState("");
-  const [stageIds, setStageIds] = useState([]);
-  const [newNamesText, setNewNamesText] = useState("");
-
-  const toggle = (id) =>
-    setStageIds((curr) =>
-      curr.includes(id) ? curr.filter((x) => x !== id) : [...curr, id],
-    );
-
-  const assignedTo = (sid) => {
-    const owner = (category.steps ?? []).find((st) =>
-      st.stageIds.includes(sid),
-    );
-    return owner?.name ?? null;
-  };
-
-  const newStageNames = newNamesText
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-
-  const canCreate =
-    name.trim().length > 0 &&
-    (stageIds.length > 0 || newStageNames.length > 0);
-
-  return (
-    <div
-      className="fixed inset-0 z-30 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4"
-      onMouseDown={onClose}
-    >
-      <div
-        className="my-8 w-full max-w-md rounded-xl border border-slate-200 bg-white shadow-xl"
-        onMouseDown={(e) => e.stopPropagation()}
-      >
-        <header className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
-          <h3 className="text-sm font-semibold text-ink">
-            Add step · {category.name}
-          </h3>
-          <button
-            onClick={onClose}
-            className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-          >
-            ✕
-          </button>
-        </header>
-        <div className="space-y-4 px-5 py-4">
-          <div>
-            <label className="mb-1 block text-[11px] font-medium text-slate-500">
-              Step name
-            </label>
+        {addingStep ? (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border-2 border-dashed border-brand-300 bg-brand-50/40 p-3">
             <Input
               autoFocus
-              placeholder="e.g. Step 1, First Fix, Finishes"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
+              className="h-9 w-56"
+              placeholder="Step name e.g. First Fix"
+              value={newStepName}
+              onChange={(e) => setNewStepName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  const name = newStepName.trim();
+                  if (!name) return;
+                  addStep(category.id, { name });
+                  setNewStepName("");
+                  setAddingStep(false);
+                } else if (e.key === "Escape") {
+                  setAddingStep(false);
+                  setNewStepName("");
+                }
+              }}
             />
+            <Button
+              onClick={() => {
+                const name = newStepName.trim();
+                if (!name) return;
+                addStep(category.id, { name });
+                setNewStepName("");
+                setAddingStep(false);
+              }}
+              disabled={!newStepName.trim()}
+            >
+              Add step
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setAddingStep(false);
+                setNewStepName("");
+              }}
+            >
+              Cancel
+            </Button>
           </div>
-
-          <div>
-            <label className="mb-1 block text-[11px] font-medium text-slate-500">
-              Choose existing tags
-            </label>
-            {category.stages.length === 0 ? (
-              <EmptyHint>No tags exist yet — add new ones below.</EmptyHint>
-            ) : (
-              <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border border-slate-200 bg-slate-50 p-2">
-                {category.stages.map((s) => {
-                  const on = stageIds.includes(s.id);
-                  const owner = assignedTo(s.id);
-                  const disabled = !!owner;
-                  return (
-                    <label
-                      key={s.id}
-                      title={
-                        disabled
-                          ? `Already in "${owner}" — detach it first`
-                          : undefined
-                      }
-                      className={`flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm transition ${
-                        disabled
-                          ? "cursor-not-allowed border-transparent bg-slate-100 text-slate-400"
-                          : on
-                            ? "cursor-pointer border-brand-300 bg-brand-50 text-brand-700"
-                            : "cursor-pointer border-transparent bg-white text-slate-700 hover:border-brand-200"
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={on}
-                        disabled={disabled}
-                        onChange={() => !disabled && toggle(s.id)}
-                        className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 disabled:cursor-not-allowed"
-                      />
-                      <span className="flex-1">{s.name}</span>
-                      {owner && (
-                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-                          in {owner}
-                        </span>
-                      )}
-                    </label>
-                  );
-                })}
-              </div>
-            )}
-            {stageIds.length > 0 && (
-              <div className="mt-2 text-[11px] text-slate-500">
-                {stageIds.length} existing tag(s) will move into this step
-              </div>
-            )}
-          </div>
-
-          <div>
-            <label className="mb-1 block text-[11px] font-medium text-slate-500">
-              Or create new tags (comma-separated)
-            </label>
-            <Input
-              placeholder="e.g. Snagging, Final Clean, Handover"
-              value={newNamesText}
-              onChange={(e) => setNewNamesText(e.target.value)}
-            />
-            {newStageNames.length > 0 && (
-              <div className="mt-2 text-[11px] text-slate-500">
-                {newStageNames.length} new tag(s) will be created
-              </div>
-            )}
-          </div>
-        </div>
-        <footer className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3">
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
+        ) : (
+          <Button variant="secondary" onClick={() => setAddingStep(true)}>
+            + Add step
           </Button>
-          <Button
-            disabled={!canCreate}
-            onClick={() =>
-              onCreate({
-                name: name.trim(),
-                stageIds,
-                newStageNames,
-              })
-            }
-          >
-            Create step
-          </Button>
-        </footer>
+        )}
       </div>
-    </div>
+    </Card>
   );
 }
 

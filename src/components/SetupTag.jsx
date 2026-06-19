@@ -53,6 +53,7 @@ function TagRelationsCard({ category }) {
   const [editingId, setEditingId] = useState(null);
   const [editingName, setEditingName] = useState("");
   const [addCategoryForTagId, setAddCategoryForTagId] = useState(null);
+  const [overTagId, setOverTagId] = useState(null);
 
   const tradeName = (id) =>
     category.trades.find((t) => t.id === id)?.name ?? "—";
@@ -95,10 +96,37 @@ function TagRelationsCard({ category }) {
             {category.stages.map((s, i) => {
               const linkedIds = category.stageTradeMap[s.id] ?? [];
               const isEditing = editingId === s.id;
+              const isOver = overTagId === s.id;
               return (
                 <div
                   key={s.id}
-                  className="rounded-lg border-2 border-dashed border-slate-300 bg-slate-50 p-3"
+                  onDragOver={(e) => {
+                    if (
+                      e.dataTransfer.types.includes("application/x-trade-pool")
+                    ) {
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = "copy";
+                      setOverTagId(s.id);
+                    }
+                  }}
+                  onDragLeave={() =>
+                    setOverTagId((v) => (v === s.id ? null : v))
+                  }
+                  onDrop={(e) => {
+                    const tradeId = e.dataTransfer.getData(
+                      "application/x-trade-pool",
+                    );
+                    if (tradeId) {
+                      e.preventDefault();
+                      addStageTrade(category.id, s.id, tradeId);
+                      setOverTagId(null);
+                    }
+                  }}
+                  className={`rounded-lg border-2 border-dashed bg-slate-50 p-3 transition ${
+                    isOver
+                      ? "border-emerald-500 ring-2 ring-emerald-400/40"
+                      : "border-slate-300"
+                  }`}
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white text-[11px] font-semibold text-slate-500 ring-1 ring-slate-200">
