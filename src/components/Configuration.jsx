@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useApp } from "../store.jsx";
-import { Card, Button, Input, EmptyHint, PageHeader, Select } from "./ui.jsx";
+import { Card, Button, Input, EmptyHint, PageHeader, Select, Combobox } from "./ui.jsx";
 
 export function Configuration() {
   const { categories } = useApp();
@@ -20,7 +20,7 @@ export function Configuration() {
     <div className="space-y-5">
       <PageHeader
         title="Configuration"
-        description="Each unit category (Flat, Corridor, Staircase, …) keeps its own work categories, its own ordered tags, and its own work category↔tag relations. Switch tabs to configure each one independently."
+        description="Group each category's tags into ordered Steps. Tags and work categories themselves are managed on the Setup tag page."
       />
       <CategoryTabs activeId={activeCatId} onSelect={setActiveCatId} />
       {activeCat ? (
@@ -34,7 +34,7 @@ export function Configuration() {
 
 // ---------- tabs + add-category dialog ----------
 
-function CategoryTabs({ activeId, onSelect }) {
+export function CategoryTabs({ activeId, onSelect }) {
   const { categories, addCategory, renameCategory, removeCategory } = useApp();
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
@@ -182,9 +182,8 @@ function CategoryTabs({ activeId, onSelect }) {
 export function CategoryEditor({ category }) {
   return (
     <div className="grid gap-5 md:grid-cols-4">
-      <div className="md:col-span-1 space-y-5">
-        <TradesCard category={category} />
-        <TagsCard category={category} />
+      <div className="md:col-span-1">
+        <TagsReferenceCard category={category} />
       </div>
       <div className="md:col-span-3">
         <StepBundleBuilder category={category} />
@@ -193,7 +192,57 @@ export function CategoryEditor({ category }) {
   );
 }
 
-function TradesCard({ category }) {
+// Read-only tag list for the Configuration page — shows every tag defined in
+// the Setup tag page along with its current step assignment, but no CRUD.
+function TagsReferenceCard({ category }) {
+  const stepOf = (sid) =>
+    (category.steps ?? []).find((st) => st.stageIds.includes(sid));
+
+  return (
+    <Card
+      title={`Tags · ${category.name}`}
+      right={
+        <span className="text-[11px] text-slate-400">
+          From Setup tag
+        </span>
+      }
+    >
+      {category.stages.length === 0 ? (
+        <EmptyHint>
+          No tags yet — define them on the Setup tag page first.
+        </EmptyHint>
+      ) : (
+        <ul className="space-y-1.5">
+          {category.stages.map((s, i) => {
+            const step = stepOf(s.id);
+            return (
+              <li
+                key={s.id}
+                className="flex items-center gap-2 rounded-md border border-slate-100 bg-slate-50 px-3 py-2"
+              >
+                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-white text-[10px] font-semibold text-slate-500 ring-1 ring-slate-200">
+                  {i + 1}
+                </span>
+                <span className="flex-1 text-sm text-ink">{s.name}</span>
+                {step ? (
+                  <span className="rounded-full bg-brand-100 px-2 py-0.5 text-[10px] font-medium text-brand-700">
+                    {step.name}
+                  </span>
+                ) : (
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                    unassigned
+                  </span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+export function TradesCard({ category }) {
   const { addTrade, renameTrade, removeTrade } = useApp();
   const [newName, setNewName] = useState("");
   const [editingId, setEditingId] = useState(null);
@@ -284,158 +333,20 @@ function TradesCard({ category }) {
   );
 }
 
-function TagsCard({ category }) {
-  const { addStage, renameStage, removeStage, moveStage } = useApp();
-  const [newName, setNewName] = useState("");
-  const [editingId, setEditingId] = useState(null);
-  const [editingName, setEditingName] = useState("");
-
-  const stepOf = (stageId) =>
-    (category.steps ?? []).find((st) => st.stageIds.includes(stageId));
-
-  return (
-    <Card title={`Tags · ${category.name}`}>
-      <div className="space-y-3">
-        <div className="flex gap-2">
-          <Input
-            placeholder="e.g. Snagging"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                addStage(category.id, newName);
-                setNewName("");
-              }
-            }}
-          />
-          <Button
-            onClick={() => {
-              addStage(category.id, newName);
-              setNewName("");
-            }}
-            disabled={!newName.trim()}
-          >
-            Add
-          </Button>
-        </div>
-        {category.stages.length === 0 ? (
-          <EmptyHint>No tags yet — add one above.</EmptyHint>
-        ) : (
-          <ul className="space-y-1.5">
-            {category.stages.map((s, i) => {
-              const step = stepOf(s.id);
-              return (
-                <li
-                  key={s.id}
-                  className="flex flex-wrap items-center gap-2 rounded-md border border-slate-100 bg-slate-50 px-3 py-2"
-                >
-                  {editingId === s.id ? (
-                    <>
-                      <Input
-                        value={editingName}
-                        onChange={(e) => setEditingName(e.target.value)}
-                        className="h-8"
-                        autoFocus
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            renameStage(category.id, s.id, editingName.trim());
-                            setEditingId(null);
-                          }
-                        }}
-                      />
-                      <Button
-                        size="sm"
-                        onClick={() => {
-                          renameStage(category.id, s.id, editingName.trim());
-                          setEditingId(null);
-                        }}
-                      >
-                        Save
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setEditingId(null)}
-                      >
-                        Cancel
-                      </Button>
-                    </>
-                  ) : (
-                    <>
-                      <span className="flex-1 text-sm text-ink">{s.name}</span>
-                      {step ? (
-                        <span className="rounded-full bg-brand-100 px-2 py-0.5 text-[10px] font-medium text-brand-700">
-                          {step.name}
-                        </span>
-                      ) : (
-                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-                          unassigned
-                        </span>
-                      )}
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => moveStage(category.id, i, -1)}
-                        disabled={i === 0}
-                      >
-                        ↑
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => moveStage(category.id, i, 1)}
-                        disabled={i === category.stages.length - 1}
-                      >
-                        ↓
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => {
-                          setEditingId(s.id);
-                          setEditingName(s.name);
-                        }}
-                      >
-                        Rename
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="danger"
-                        onClick={() => removeStage(category.id, s.id)}
-                      >
-                        Delete
-                      </Button>
-                    </>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
-    </Card>
-  );
-}
-
 
 function StepBundleBuilder({ category }) {
   const {
     addStage, renameStage, removeStage,
-    addTrade,
-    addStageTrade, removeStageTrade, reorderStageTrade,
     addStep, renameStep, removeStep, moveStep, reorderStep,
-    addStepStage, removeStepStage, reorderStepStage,
-    moveStageToStep, moveStageTrade,
+    removeStepStage, reorderStepStage,
   } = useApp();
   const [editingTagId, setEditingTagId] = useState(null);
   const [editingTagName, setEditingTagName] = useState("");
   const [editingStepId, setEditingStepId] = useState(null);
   const [editingStepName, setEditingStepName] = useState("");
   const [addingTagForStepId, setAddingTagForStepId] = useState(null);
-  const [newTagName, setNewTagName] = useState("");
-  const [addCategoryForTagId, setAddCategoryForTagId] = useState(null);
   const [showAddStep, setShowAddStep] = useState(false);
-  // Drag state: kind = 'step' | 'tag' | 'wc'
+  // Drag state: kind = 'step' | 'tag'
   const [drag, setDrag] = useState(null);
   const [overIdx, setOverIdx] = useState(null);
 
@@ -448,14 +359,6 @@ function StepBundleBuilder({ category }) {
   const clearDrag = () => {
     setDrag(null);
     setOverIdx(null);
-  };
-
-  const submitNewTagInStep = (stepId) => {
-    const name = newTagName.trim();
-    if (!name) return;
-    addStage(category.id, name, stepId);
-    setNewTagName("");
-    setAddingTagForStepId(null);
   };
 
   // ------- one tag card (shared by steps + unassigned bucket) -------
@@ -605,162 +508,24 @@ function StepBundleBuilder({ category }) {
           )}
         </div>
 
-        <div className="mt-3 space-y-1.5">
+        <div className="mt-3">
           {linkedIds.length === 0 ? (
-            <div
-              onDragOver={(e) => {
-                if (
-                  drag?.kind === "wc" &&
-                  drag.tagId !== s.id &&
-                  drag.tradeId &&
-                  !linkedIds.includes(drag.tradeId)
-                ) {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  e.dataTransfer.dropEffect = "move";
-                  setOverIdx({ kind: "wc-empty", tagId: s.id });
-                }
-              }}
-              onDragLeave={() =>
-                setOverIdx((v) =>
-                  v?.kind === "wc-empty" && v.tagId === s.id ? null : v,
-                )
-              }
-              onDrop={(e) => {
-                if (
-                  drag?.kind === "wc" &&
-                  drag.tagId !== s.id &&
-                  drag.tradeId
-                ) {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  moveStageTrade(
-                    category.id,
-                    drag.tagId,
-                    s.id,
-                    drag.tradeId,
-                  );
-                  clearDrag();
-                }
-              }}
-              className={`rounded-md border border-dashed bg-slate-50 px-3 py-2 text-[11px] transition ${
-                overIdx?.kind === "wc-empty" && overIdx.tagId === s.id
-                  ? "border-brand-500 bg-brand-50 text-brand-700"
-                  : "border-slate-200 text-slate-400"
-              }`}
-            >
-              No work categories linked yet — add one below or drag one here.
+            <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] text-slate-400">
+              No work categories linked · set them on the Setup tag page.
             </div>
           ) : (
-            linkedIds.map((tid, k) => {
-              const wcDropTargetable =
-                drag?.kind === "wc" &&
-                // Block highlight on source slot only when in same tag
-                !(drag.tagId === s.id && drag.idx === k) &&
-                // Avoid noop when destination already has the same trade
-                !(drag.tagId !== s.id && drag.tradeId === tid) &&
-                !(linkedIds.includes(drag.tradeId) && drag.tagId !== s.id);
-              const isWcOver =
-                wcDropTargetable &&
-                overIdx?.kind === "wc" &&
-                overIdx.tagId === s.id &&
-                overIdx.idx === k;
-              return (
-                <div
+            <div className="flex flex-wrap gap-1.5">
+              {linkedIds.map((tid) => (
+                <span
                   key={tid}
-                  onDragOver={(e) => {
-                    if (wcDropTargetable) {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      e.dataTransfer.dropEffect = "move";
-                      setOverIdx({ kind: "wc", tagId: s.id, idx: k });
-                    }
-                  }}
-                  onDragLeave={() =>
-                    setOverIdx((v) =>
-                      v?.kind === "wc" &&
-                      v.tagId === s.id &&
-                      v.idx === k
-                        ? null
-                        : v,
-                    )
-                  }
-                  onDrop={(e) => {
-                    if (drag?.kind === "wc") {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      if (drag.tagId === s.id) {
-                        reorderStageTrade(category.id, s.id, drag.idx, k);
-                      } else if (drag.tradeId) {
-                        moveStageTrade(
-                          category.id,
-                          drag.tagId,
-                          s.id,
-                          drag.tradeId,
-                          k,
-                        );
-                      }
-                      clearDrag();
-                    }
-                  }}
-                  className={`flex items-center gap-2 rounded-md border bg-slate-50 px-3 py-2 text-sm transition ${
-                    isWcOver
-                      ? "border-brand-500 ring-2 ring-brand-400/40"
-                      : "border-slate-200"
-                  } ${
-                    drag?.kind === "wc" &&
-                    drag.tagId === s.id &&
-                    drag.idx === k
-                      ? "opacity-50"
-                      : ""
-                  }`}
+                  className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700"
                 >
-                  <span
-                    draggable
-                    onDragStart={(e) => {
-                      e.stopPropagation();
-                      setDrag({
-                        kind: "wc",
-                        tagId: s.id,
-                        idx: k,
-                        tradeId: tid,
-                      });
-                      e.dataTransfer.effectAllowed = "move";
-                      e.dataTransfer.setData("text/plain", `wc:${tid}`);
-                      const row = e.currentTarget.closest("div.rounded-md");
-                      if (row) e.dataTransfer.setDragImage(row, 12, 12);
-                    }}
-                    onDragEnd={clearDrag}
-                    className="cursor-grab text-slate-300 select-none active:cursor-grabbing"
-                    title="Drag to reorder · drop on another tag to move"
-                  >
-                    ⋮⋮
-                  </span>
-                  <span className="h-2 w-2 rounded-full bg-brand-500" />
-                  <span className="flex-1 text-ink">{tradeName(tid)}</span>
-                  <button
-                    onClick={() =>
-                      removeStageTrade(category.id, s.id, tid)
-                    }
-                    className="rounded p-1 text-slate-400 hover:bg-white hover:text-rose-600"
-                    title="Remove from this tag"
-                  >
-                    ✕
-                  </button>
-                </div>
-              );
-            })
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  {tradeName(tid)}
+                </span>
+              ))}
+            </div>
           )}
-        </div>
-
-        <div className="mt-3 flex items-center justify-between">
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => setAddCategoryForTagId(s.id)}
-          >
-            + Add work category
-          </Button>
         </div>
       </div>
     );
@@ -921,32 +686,36 @@ function StepBundleBuilder({ category }) {
 
           {addingTagForStepId === step.id ? (
             <div className="flex flex-wrap items-center gap-2 rounded-lg border-2 border-dashed border-brand-300 bg-brand-50/40 p-3">
-              <Input
-                autoFocus
-                className="h-9 w-56"
-                placeholder="Tag name e.g. Snagging"
-                value={newTagName}
-                onChange={(e) => setNewTagName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") submitNewTagInStep(step.id);
-                  else if (e.key === "Escape") {
+              <div className="min-w-[260px] flex-1">
+                <Combobox
+                  value=""
+                  onChange={(stageId) => {
+                    addStepStage(category.id, step.id, stageId);
                     setAddingTagForStepId(null);
-                    setNewTagName("");
-                  }
-                }}
-              />
-              <Button
-                onClick={() => submitNewTagInStep(step.id)}
-                disabled={!newTagName.trim()}
-              >
-                Add tag
-              </Button>
+                  }}
+                  options={category.stages.map((s) => {
+                    const owner = (category.steps ?? []).find((st) =>
+                      st.stageIds.includes(s.id),
+                    );
+                    return {
+                      value: s.id,
+                      label: s.name,
+                      disabled: !!owner,
+                      hint: owner ? `in ${owner.name}` : undefined,
+                      disabledReason: owner
+                        ? `Already in "${owner.name}" — detach it first`
+                        : undefined,
+                    };
+                  })}
+                  onAdd={(name) => addStage(category.id, name, step.id)}
+                  placeholder="Search tags or type a new name…"
+                  emptyLabel="No matching tags"
+                  addLabel="+ Create tag"
+                />
+              </div>
               <Button
                 variant="ghost"
-                onClick={() => {
-                  setAddingTagForStepId(null);
-                  setNewTagName("");
-                }}
+                onClick={() => setAddingTagForStepId(null)}
               >
                 Cancel
               </Button>
@@ -955,10 +724,7 @@ function StepBundleBuilder({ category }) {
             <Button
               size="sm"
               variant="secondary"
-              onClick={() => {
-                setAddingTagForStepId(step.id);
-                setNewTagName("");
-              }}
+              onClick={() => setAddingTagForStepId(step.id)}
             >
               + Add tag
             </Button>
@@ -988,23 +754,6 @@ function StepBundleBuilder({ category }) {
           + Add step
         </Button>
       </div>
-
-      {addCategoryForTagId && (
-        <AddWorkCategoryModal
-          category={category}
-          tagId={addCategoryForTagId}
-          onClose={() => setAddCategoryForTagId(null)}
-          onAdd={({ existingIds, newNames }) => {
-            const createdIds = (newNames || [])
-              .map((n) => addTrade(category.id, n))
-              .filter(Boolean);
-            [...existingIds, ...createdIds].forEach((tid) =>
-              addStageTrade(category.id, addCategoryForTagId, tid),
-            );
-            setAddCategoryForTagId(null);
-          }}
-        />
-      )}
 
       {showAddStep && (
         <AddStepModal
@@ -1170,7 +919,7 @@ function AddStepModal({ category, onClose, onCreate }) {
   );
 }
 
-function AddWorkCategoryModal({ category, tagId, onClose, onAdd }) {
+export function AddWorkCategoryModal({ category, tagId, onClose, onAdd }) {
   const tag = category.stages.find((s) => s.id === tagId);
   const linked = new Set(category.stageTradeMap[tagId] ?? []);
   const available = category.trades.filter((t) => !linked.has(t.id));

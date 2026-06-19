@@ -149,6 +149,8 @@ export function Combobox({
   }, [open]);
 
   const pick = (val) => {
+    const opt = options.find((o) => o.value === val);
+    if (opt?.disabled) return;
     onChange(val);
     setOpen(false);
     setQuery("");
@@ -188,7 +190,8 @@ export function Combobox({
         }}
         onKeyDown={(e) => {
           if (e.key === "Enter") {
-            if (filtered[0]) pick(filtered[0].value);
+            const firstEnabled = filtered.find((o) => !o.disabled);
+            if (firstEnabled) pick(firstEnabled.value);
             else if (canAdd) addNow();
           } else if (e.key === "Escape") {
             setOpen(false);
@@ -215,13 +218,25 @@ export function Combobox({
                   <button
                     key={o.value}
                     onClick={() => pick(o.value)}
-                    className={`flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm hover:bg-brand-50 ${
-                      o.value === value ? "bg-brand-50/60 text-brand-700" : ""
+                    disabled={o.disabled}
+                    title={o.disabled ? o.disabledReason ?? "" : ""}
+                    className={`flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm ${
+                      o.disabled
+                        ? "cursor-not-allowed bg-slate-50 text-slate-400"
+                        : "hover:bg-brand-50"
+                    } ${
+                      !o.disabled && o.value === value
+                        ? "bg-brand-50/60 text-brand-700"
+                        : ""
                     }`}
                   >
                     <span>{o.label}</span>
                     {o.hint && (
-                      <span className="text-[11px] text-slate-400">
+                      <span
+                        className={`text-[11px] ${
+                          o.disabled ? "text-amber-600" : "text-slate-400"
+                        }`}
+                      >
                         {o.hint}
                       </span>
                     )}
