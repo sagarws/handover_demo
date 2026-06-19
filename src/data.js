@@ -43,8 +43,8 @@ const stage = (name) => ({ id: uid("stg"), name });
 
 // Build a category with its own trades/stages and a stage→trade mapping
 // expressed as { stageIdx: [tradeIdx, …] } so the seed is readable.
-// Each stage is grouped under its own "Step N" by default — users can later
-// merge/split steps and assign tags between them in Configuration.
+// Steps start empty so the user explicitly authors them in Configuration —
+// every tag is "unassigned" until they group them.
 const buildCategory = (name, tradeNames, stageNames, mapping = {}) => {
   const trades = tradeNames.map(trade);
   const stages = stageNames.map(stage);
@@ -55,50 +55,52 @@ const buildCategory = (name, tradeNames, stageNames, mapping = {}) => {
       .filter(Boolean);
     stageTradeMap[s.id] = tids;
   });
-  const steps = stages.map((s, i) => ({
-    id: uid("stp"),
-    name: `Step ${i + 1}`,
-    stageIds: [s.id],
-  }));
-  return { id: uid("cat"), name, trades, stages, stageTradeMap, steps };
+  return { id: uid("cat"), name, trades, stages, stageTradeMap, steps: [] };
 };
 
 export const initialCategories = [
   buildCategory(
     "Flat",
     [
+      "Plumbing",
+      "Electrical",
       "Drylining",
-      "M&E (First Fix)",
       "Plastering",
-      "Carpentry (Second Fix)",
-      "Painting & Decoration",
+      "Ventilation",
+      "Carpentry",
+      "Tiling",
+      "Painting",
     ],
     [
       "Drylining 1st Side",
       "First Fix M&E",
+      "Insulation",
+      "Drylining 2nd Side",
       "Plastering",
+      "Screed",
       "Second Fix Carpentry",
+      "Second Fix M&E",
+      "Tiling",
+      "Decoration 1st Coat",
+      "Kitchen Install",
+      "Bathroom Install",
+      "Flooring",
       "Decoration Final",
+      "Sanitaryware",
+      "Snagging",
+      "Pre-Handover Clean",
+      "Final Handover",
     ],
-    {
-      0: [0],
-      1: [1, 0], // multi-trade example: M&E + Drylining together
-      2: [2],
-      3: [3],
-      4: [4],
-    },
   ),
   buildCategory(
     "Corridor",
-    ["Drylining", "M&E", "Plastering", "Painting"],
+    ["Drylining", "Electrical", "Plastering", "Painting"],
     ["Drylining", "First Fix M&E", "Plastering", "Decoration"],
-    { 0: [0], 1: [1], 2: [2], 3: [3] },
   ),
   buildCategory(
     "Staircase",
     ["Drylining", "Plastering", "Painting"],
     ["Drylining", "Plastering", "Decoration"],
-    { 0: [0], 1: [1], 2: [2] },
   ),
 ];
 
@@ -125,8 +127,8 @@ export const initialContractors = [
     name: "Priya Shah",
     company: "Bright Spark Electric",
     tradeIds: [
-      tradeId("Flat", "M&E (First Fix)"),
-      tradeId("Corridor", "M&E"),
+      tradeId("Flat", "Electrical"),
+      tradeId("Corridor", "Electrical"),
     ].filter(Boolean),
   },
   {
@@ -143,14 +145,14 @@ export const initialContractors = [
     id: uid("ctr"),
     name: "Sam Chen",
     company: "Chen Carpentry",
-    tradeIds: [tradeId("Flat", "Carpentry (Second Fix)")].filter(Boolean),
+    tradeIds: [tradeId("Flat", "Carpentry")].filter(Boolean),
   },
   {
     id: uid("ctr"),
     name: "Ola Adeyemi",
     company: "Adeyemi Paints",
     tradeIds: [
-      tradeId("Flat", "Painting & Decoration"),
+      tradeId("Flat", "Painting"),
       tradeId("Corridor", "Painting"),
       tradeId("Staircase", "Painting"),
     ].filter(Boolean),

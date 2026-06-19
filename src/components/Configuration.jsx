@@ -444,8 +444,6 @@ function StepBundleBuilder({ category }) {
   const stageById = (id) => category.stages.find((s) => s.id === id);
 
   const steps = category.steps ?? [];
-  const claimed = new Set(steps.flatMap((st) => st.stageIds));
-  const orphanStages = category.stages.filter((s) => !claimed.has(s.id));
 
   const clearDrag = () => {
     setDrag(null);
@@ -1001,31 +999,11 @@ function StepBundleBuilder({ category }) {
       }
     >
       <div className="space-y-4">
-        {steps.length === 0 && orphanStages.length === 0 ? (
+        {steps.length === 0 ? (
           <EmptyHint>No steps yet — add one below.</EmptyHint>
         ) : null}
 
         {steps.map(renderStep)}
-
-        {orphanStages.length > 0 && (
-          <div className="rounded-xl border-2 border-dashed border-amber-300 bg-amber-50/40 p-4">
-            <div className="mb-2 flex items-center gap-2">
-              <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-amber-500 text-[11px] font-semibold text-white">
-                ?
-              </span>
-              <span className="text-sm font-semibold text-amber-800">
-                Unassigned tags
-              </span>
-              <span className="text-[11px] text-amber-700/70">
-                add them to a step from the modal, or drag handles when
-                available
-              </span>
-            </div>
-            <div className="space-y-2">
-              {orphanStages.map((s, j) => renderTagCard(s, j, null))}
-            </div>
-          </div>
-        )}
 
         <Button variant="secondary" onClick={() => setShowAddStep(true)}>
           + Add step
