@@ -118,7 +118,7 @@ export function Handover() {
         value: u.id,
         label: u.name,
         group: cat?.name ?? "Unknown",
-        hint: cat ? `${cat.stages.length} stages` : "",
+        hint: cat ? `${cat.stages.length} tags` : "",
       };
     });
   }, [site, getCategory]);
@@ -127,7 +127,7 @@ export function Handover() {
     <div className="space-y-5">
       <PageHeader
         title="Handover"
-        description="Pick a unit and submit its active stage's trade slots one at a time. Each unit walks the stage list defined for its category — a flat, a corridor and a staircase progress completely independently. A stage only advances once every linked trade has been handed over."
+        description="Pick a unit and submit its active tag's work category slots one at a time. Each unit walks the tag list defined for its category — a flat, a corridor and a staircase progress completely independently. A tag only advances once every linked work category has been handed over."
       />
 
       <Card title="Pick site & unit">
@@ -172,32 +172,32 @@ export function Handover() {
               <Pill tone="slate">{category?.name ?? "—"}</Pill>
               <Pill tone={finished ? "green" : "blue"}>
                 {stages.length === 0
-                  ? "No stages in category"
+                  ? "No tags in category"
                   : finished
-                    ? "All stages complete"
-                    : `Stage ${activeIdx + 1} of ${stages.length}`}
+                    ? "All tags complete"
+                    : `Tag ${activeIdx + 1} of ${stages.length}`}
               </Pill>
             </span>
           }
         >
           {stages.length === 0 ? (
             <EmptyHint>
-              The “{category?.name}” category has no stages — define some in
+              The “{category?.name}” category has no tags — define some in
               Configuration.
             </EmptyHint>
           ) : finished ? (
             <div className="rounded-md bg-emerald-50 px-4 py-6 text-center text-sm text-emerald-700">
-              ✓ Every stage on this unit has been handed over.
+              ✓ Every tag on this unit has been handed over.
             </div>
           ) : !activeStage ? (
-            <EmptyHint>No active stage.</EmptyHint>
+            <EmptyHint>No active tag.</EmptyHint>
           ) : (
             <div className="grid gap-4 md:grid-cols-[1fr,260px]">
               <div className="rounded-lg border border-brand-200 bg-brand-50/50 p-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="text-[11px] font-semibold uppercase tracking-wider text-brand-700">
-                      Active stage
+                      Active tag
                     </div>
                     <div className="mt-1 text-lg font-semibold text-ink">
                       {activeStage.name}
@@ -208,7 +208,7 @@ export function Handover() {
                       {stagePct}%
                     </div>
                     <div className="text-[11px] text-slate-500">
-                      {filledCount} of {slotCount} trades submitted
+                      {filledCount} of {slotCount} work categories submitted
                     </div>
                   </div>
                 </div>
@@ -226,11 +226,11 @@ export function Handover() {
 
                 <div className="mt-4">
                   <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                    Required trades
+                    Required work categories
                   </div>
                   {requiredTradeIds.length === 0 ? (
                     <Pill tone="rose">
-                      no trade linked — wire one up in Configuration
+                      no work category linked — wire one up in Configuration
                     </Pill>
                   ) : (
                     <ul className="space-y-1.5">
@@ -277,11 +277,11 @@ export function Handover() {
                 {unfilledTradeIds.length > 0 && (
                   <div className="mt-4 space-y-3 rounded-md border border-slate-200 bg-white p-3">
                     <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                      Submit next trade
+                      Submit next work category
                     </div>
                     {eligibleContractors.length === 0 ? (
                       <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                        No contractor carries any of the pending trades for the
+                        No contractor carries any of the pending work categories for the
                         “{category?.name}” category. Tag a contractor on the
                         Contractors page.
                       </div>
@@ -314,7 +314,7 @@ export function Handover() {
                         {availableSubmitTradeIds.length > 1 && (
                           <div>
                             <label className="mb-1 block text-[11px] font-medium text-slate-500">
-                              Submitting under trade
+                              Submitting under work category
                             </label>
                             <Select
                               value={submitTradeId}
@@ -348,12 +348,12 @@ export function Handover() {
                           </Button>
                           <span className="text-[11px] text-slate-500">
                             {filledCount + 1 >= slotCount
-                              ? `Final slot — completes stage, advances to ${
+                              ? `Final slot — completes tag, advances to ${
                                   stages[activeIdx + 1]?.name ?? "completion"
                                 }`
-                              : `Stage stays active — ${
+                              : `Tag stays active — ${
                                   slotCount - filledCount - 1
-                                } more trade(s) needed`}
+                                } more work category(s) needed`}
                           </span>
                         </div>
                       </>
@@ -372,7 +372,7 @@ export function Handover() {
                       {stages[activeIdx + 1].name}
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-slate-500">
-                      <span>Trades:</span>
+                      <span>Work categories:</span>
                       {(stageTradeMap[stages[activeIdx + 1].id] ?? []).length ===
                       0 ? (
                         <Pill tone="rose">none</Pill>
@@ -389,7 +389,7 @@ export function Handover() {
                   </>
                 ) : (
                   <div className="mt-1 text-sm text-slate-500">
-                    Final stage — completion ends this unit.
+                    Final tag — completion ends this unit.
                   </div>
                 )}
               </div>
@@ -400,10 +400,10 @@ export function Handover() {
           <div className="mt-5">
             <div className="mb-2 flex items-center justify-between">
               <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                Stage timeline · {category?.name} category
+                Tag timeline · {category?.name} category
               </span>
               <span className="text-[11px] text-slate-400">
-                {stages.length} stages defined
+                {stages.length} tags defined
               </span>
             </div>
             <ol className="space-y-1.5">
@@ -444,7 +444,7 @@ export function Handover() {
                     </span>
                     <div className="flex flex-wrap gap-1">
                       {tradeIds.length === 0 ? (
-                        <Pill tone="rose">no trade</Pill>
+                        <Pill tone="rose">no work category</Pill>
                       ) : (
                         tradeIds.map((tid) => (
                           <Pill key={tid} tone={subs[tid] ? "green" : "slate"}>
@@ -485,7 +485,7 @@ export function Handover() {
           <EmptyHint>Pick a unit to see its handover events.</EmptyHint>
         ) : flatHandovers.length === 0 ? (
           <EmptyHint>
-            No submissions yet — fill the first trade slot above.
+            No submissions yet — fill the first work category slot above.
           </EmptyHint>
         ) : (
           <ul className="space-y-2">
@@ -508,7 +508,7 @@ export function Handover() {
                       nextStage ? (
                         <>
                           <span className="text-slate-400">
-                            → stage complete · handover to
+                            → tag complete · handover to
                           </span>
                           <Pill tone="blue">{nextStage.name}</Pill>
                         </>

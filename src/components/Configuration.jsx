@@ -20,7 +20,7 @@ export function Configuration() {
     <div className="space-y-5">
       <PageHeader
         title="Configuration"
-        description="Each unit category (Flat, Corridor, Staircase, …) keeps its own trades, its own ordered stages, and its own trade↔stage relations. Switch tabs to configure each one independently."
+        description="Each unit category (Flat, Corridor, Staircase, …) keeps its own work categories, its own ordered tags, and its own work category↔tag relations. Switch tabs to configure each one independently."
       />
       <CategoryTabs activeId={activeCatId} onSelect={setActiveCatId} />
       {activeCat ? (
@@ -148,7 +148,7 @@ function CategoryTabs({ activeId, onSelect }) {
               <option value="">Start blank</option>
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>
-                  Copy stages from “{c.name}”
+                  Copy tags from “{c.name}”
                 </option>
               ))}
             </Select>
@@ -198,7 +198,7 @@ function TradesCard({ category }) {
   const [editingName, setEditingName] = useState("");
 
   return (
-    <Card title={`Trades · ${category.name}`}>
+    <Card title={`Work categories · ${category.name}`}>
       <div className="space-y-3">
         <div className="flex gap-2">
           <Input
@@ -223,7 +223,7 @@ function TradesCard({ category }) {
           </Button>
         </div>
         {category.trades.length === 0 ? (
-          <EmptyHint>No trades yet — add one above.</EmptyHint>
+          <EmptyHint>No work categories yet — add one above.</EmptyHint>
         ) : (
           <ul className="space-y-1.5">
             {category.trades.map((t) => (
@@ -291,7 +291,7 @@ function StagesCard({ category }) {
 
   return (
     <Card
-      title={`Stages · ${category.name}`}
+      title={`Tags · ${category.name}`}
       right={
         <span className="text-[11px] text-slate-400">
           Top → bottom drives matrix order
@@ -322,7 +322,7 @@ function StagesCard({ category }) {
           </Button>
         </div>
         {category.stages.length === 0 ? (
-          <EmptyHint>No stages yet — add one above.</EmptyHint>
+          <EmptyHint>No tags yet — add one above.</EmptyHint>
         ) : (
           <ul className="space-y-1.5">
             {category.stages.map((s, i) => {
@@ -360,7 +360,7 @@ function StagesCard({ category }) {
                       <span className="flex-1 text-sm text-ink">{s.name}</span>
                       <div className="flex flex-wrap items-center gap-1">
                         {linkedIds.length === 0 ? (
-                          <Pill tone="rose">no trade</Pill>
+                          <Pill tone="rose">no work category</Pill>
                         ) : (
                           linkedIds.map((tid) => (
                             <Pill key={tid} tone="blue">
@@ -422,22 +422,22 @@ function RelationBuilder({ category }) {
 
   return (
     <Card
-      title={`Trade ↔ Stage relations · ${category.name}`}
+      title={`Work category ↔ Tag relations · ${category.name}`}
       right={
         <span className="text-[11px] text-slate-400">
-          Drag a trade onto a stage — multiple trades per stage allowed
+          Drag a work category onto a tag — multiple work categories per tag allowed
         </span>
       }
     >
       {category.trades.length === 0 || category.stages.length === 0 ? (
         <EmptyHint>
-          Add at least one trade and one stage in this category to build relations.
+          Add at least one work category and one tag in this category to build relations.
         </EmptyHint>
       ) : (
         <div className="grid gap-5 md:grid-cols-[260px,1fr]">
           <div>
             <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-              Trades
+              Work categories
             </div>
             <div className="space-y-2">
               {category.trades.map((t) => (
@@ -464,7 +464,7 @@ function RelationBuilder({ category }) {
                     <span className="font-medium text-ink">{t.name}</span>
                   </div>
                   <div className="mt-0.5 text-[11px] text-slate-400">
-                    Drag onto a stage →
+                    Drag onto a tag →
                   </div>
                 </div>
               ))}
@@ -473,7 +473,7 @@ function RelationBuilder({ category }) {
 
           <div>
             <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-              Stages (drop targets · multiple trades allowed)
+              Tags (drop targets · multiple work categories allowed)
             </div>
             <ol className="space-y-2">
               {category.stages.map((s, i) => {
@@ -512,7 +512,7 @@ function RelationBuilder({ category }) {
                     </span>
                     {linkedIds.length === 0 ? (
                       <span className="text-[11px] text-slate-400">
-                        drop trade here
+                        drop work category here
                       </span>
                     ) : (
                       <div className="flex flex-wrap gap-1.5">

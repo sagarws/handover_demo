@@ -15,7 +15,7 @@ export function Sites() {
     <div className="space-y-5">
       <PageHeader
         title="Sites"
-        description="CRUD for sites and their units. A unit is just a name + category — its stage list comes from the category (set up in Configuration), so flats, corridors and staircases each follow their own progression automatically."
+        description="CRUD for sites and their units. A unit is just a name + category — its tag list comes from the category (set up in Configuration), so flats, corridors and staircases each follow their own progression automatically."
       />
 
       <Card title="Add site">
@@ -176,7 +176,7 @@ function SiteRow({
               options={categories.map((c) => ({
                 value: c.id,
                 label: c.name,
-                hint: `${c.stages.length} stages`,
+                hint: `${c.stages.length} tags`,
               }))}
               onAdd={(name) => {
                 const id = onAddCategory(name);
@@ -210,7 +210,7 @@ function SiteRow({
                       <span>{type} ({grouped[type].length})</span>
                       {cat && (
                         <Pill tone="slate">
-                          {cat.stages.length} stages · {cat.trades.length} trades
+                          {cat.stages.length} tags · {cat.trades.length} work categories
                         </Pill>
                       )}
                     </div>

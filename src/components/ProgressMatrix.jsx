@@ -71,7 +71,7 @@ export function ProgressMatrix() {
     <div className="space-y-5">
       <PageHeader
         title="Progress Matrix"
-        description="One matrix per unit category. Columns are the stages defined in that category; the active cell fills one notch per trade submitted and only flips fully green once every linked trade has been handed over."
+        description="One matrix per unit category. Columns are the tags defined in that category; the active cell fills one notch per work category submitted and only flips fully green once every linked work category has been handed over."
       />
 
       <Card
@@ -144,13 +144,13 @@ function CategoryMatrix({ category, units, flatProgress }) {
       title={`${category.name} (${units.length})`}
       right={
         <span className="text-[11px] text-slate-400">
-          {stages.length} stages · independent progress per row
+          {stages.length} tags · independent progress per row
         </span>
       }
     >
       {stages.length === 0 ? (
         <EmptyHint>
-          “{category.name}” has no stages — define some in Configuration.
+          “{category.name}” has no tags — define some in Configuration.
         </EmptyHint>
       ) : (
         <div className="scroll-x overflow-x-auto">

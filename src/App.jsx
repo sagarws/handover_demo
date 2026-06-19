@@ -6,11 +6,11 @@ import { Configuration } from "./components/Configuration.jsx";
 import { Handover } from "./components/Handover.jsx";
 
 const TABS = [
-  { id: "matrix", label: "Progress Matrix", hint: "Flat × stage progression" },
+  { id: "matrix", label: "Progress Matrix", hint: "Flat × tag progression" },
   { id: "handover", label: "Handover", hint: "The demo flow" },
   { id: "sites", label: "Sites", hint: "Sites, flats, access" },
-  { id: "contractors", label: "Contractors", hint: "By trade" },
-  { id: "configuration", label: "Configuration", hint: "Trades · stages · links" },
+  { id: "contractors", label: "Contractors", hint: "By work category" },
+  { id: "configuration", label: "Configuration", hint: "Work categories · tags · links" },
 ];
 
 export default function App() {

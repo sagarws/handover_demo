@@ -32,7 +32,7 @@ export function Contractors() {
     <div className="space-y-5">
       <PageHeader
         title="Contractors"
-        description="Create a contractor and tag them with the trades they perform — one tick per category they work in. The handover dropdown then filters by the active stage's required trades."
+        description="Create a contractor and tag them with the work categories they perform — one tick per category they work in. The handover dropdown then filters by the active tag's required work categories."
       />
 
       <Card title="Add contractor">
@@ -60,7 +60,7 @@ export function Contractors() {
         </div>
         <div className="mt-4">
           <div className="mb-2 text-[11px] font-medium text-slate-500">
-            Trades performed (grouped by unit category)
+            Work categories performed (grouped by unit category)
           </div>
           {categories.length === 0 ? (
             <EmptyHint>
@@ -74,7 +74,7 @@ export function Contractors() {
                     {cat.name}
                   </div>
                   {cat.trades.length === 0 ? (
-                    <p className="text-[11px] text-slate-400">No trades in this category.</p>
+                    <p className="text-[11px] text-slate-400">No work categories in this category.</p>
                   ) : (
                     <div className="flex flex-wrap gap-2">
                       {cat.trades.map((t) => {
@@ -126,7 +126,7 @@ export function Contractors() {
                 <tr className="border-b border-slate-100">
                   <th className="px-2 py-2">Name</th>
                   <th className="px-2 py-2">Company</th>
-                  <th className="px-2 py-2">Trades · category</th>
+                  <th className="px-2 py-2">Work categories · category</th>
                   <th className="px-2 py-2"></th>
                 </tr>
               </thead>
@@ -138,7 +138,7 @@ export function Contractors() {
                     <td className="px-2 py-2">
                       <div className="flex flex-wrap gap-1">
                         {c.tradeIds.length === 0 ? (
-                          <Pill tone="rose">no trade</Pill>
+                          <Pill tone="rose">no work category</Pill>
                         ) : (
                           c.tradeIds.map((id) => {
                             const entry = tradeIndex.get(id);
