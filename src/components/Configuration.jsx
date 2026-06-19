@@ -179,7 +179,7 @@ function CategoryTabs({ activeId, onSelect }) {
 
 // ---------- per-category editor ----------
 
-function CategoryEditor({ category }) {
+export function CategoryEditor({ category }) {
   return (
     <div className="grid gap-5 md:grid-cols-4">
       <div className="md:col-span-1">

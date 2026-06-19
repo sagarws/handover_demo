@@ -3,6 +3,7 @@ import { useApp } from "../store.jsx";
 import {
   Card, Button, Input, Pill, EmptyHint, PageHeader, Combobox,
 } from "./ui.jsx";
+import { CategoryEditor } from "./Configuration.jsx";
 
 export function Sites() {
   const {
@@ -78,6 +79,10 @@ function SiteRow({
   const [unitName, setUnitName] = useState("");
   const [unitCategoryId, setUnitCategoryId] = useState(categories[0]?.id ?? "");
   const [accessName, setAccessName] = useState("");
+  const [configCategoryId, setConfigCategoryId] = useState(null);
+  const configCategory = configCategoryId
+    ? categories.find((c) => c.id === configCategoryId)
+    : null;
 
   // Group units by category so the list mirrors how the matrix renders.
   const categoryOf = (id) => categories.find((c) => c.id === id);
@@ -213,6 +218,27 @@ function SiteRow({
                           {cat.stages.length} tags · {cat.trades.length} work categories
                         </Pill>
                       )}
+                      {cat && (
+                        <button
+                          onClick={() => setConfigCategoryId(cat.id)}
+                          title={`Configure ${cat.name} tags & work categories`}
+                          className="ml-auto rounded-md p-1 text-slate-400 hover:bg-white hover:text-slate-700"
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className="h-4 w-4"
+                          >
+                            <circle cx="12" cy="12" r="3" />
+                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                          </svg>
+                        </button>
+                      )}
                     </div>
                     <ul className="space-y-1.5">
                       {grouped[type].map((u) => (
@@ -288,6 +314,51 @@ function SiteRow({
           )}
         </div>
       </div>
+      {configCategory && (
+        <CategoryConfigModal
+          category={configCategory}
+          onClose={() => setConfigCategoryId(null)}
+        />
+      )}
     </Card>
+  );
+}
+
+function CategoryConfigModal({ category, onClose }) {
+  return (
+    <div
+      className="fixed inset-0 z-30 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4"
+      onMouseDown={onClose}
+    >
+      <div
+        className="my-8 w-full max-w-5xl rounded-xl border border-slate-200 bg-white shadow-xl"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <header className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
+          <div>
+            <h3 className="text-sm font-semibold text-ink">
+              Configure · {category.name}
+            </h3>
+            <p className="mt-0.5 text-[11px] text-slate-500">
+              Work categories, tags, and their relations for this unit category.
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+          >
+            ✕
+          </button>
+        </header>
+        <div className="px-5 py-4">
+          <CategoryEditor category={category} />
+        </div>
+        <footer className="flex justify-end border-t border-slate-100 px-5 py-3">
+          <Button variant="secondary" onClick={onClose}>
+            Done
+          </Button>
+        </footer>
+      </div>
+    </div>
   );
 }
