@@ -397,80 +397,158 @@ export function Handover() {
             </div>
           )}
 
-          {/* Stage timeline — this unit's category stages */}
-          <div className="mt-5">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                Tag timeline · {category?.name} category
-              </span>
-              <span className="text-[11px] text-slate-400">
-                {stages.length} tags defined
-              </span>
-            </div>
-            <ol className="space-y-1.5">
-              {stages.map((s, i) => {
-                const subs = progress?.stageSubmissions?.[s.id] ?? {};
-                const isActive = i === activeIdx;
-                const isDone = i < activeIdx;
-                const tradeIds = stageTradeMap[s.id] ?? [];
-                const total = tradeIds.length || 1;
-                const filled =
-                  tradeIds.length > 0
-                    ? tradeIds.filter((t) => subs[t]).length
-                    : Object.keys(subs).length;
-                return (
-                  <li
-                    key={s.id}
-                    className={`flex flex-wrap items-center gap-2 rounded-md border px-3 py-2 ${
-                      isActive
-                        ? "border-brand-300 bg-brand-50/60"
-                        : isDone
-                          ? "border-emerald-100 bg-emerald-50/40"
-                          : "border-slate-100 bg-slate-50"
-                    }`}
-                  >
-                    <span
-                      className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold ${
-                        isDone
-                          ? "bg-emerald-500 text-white"
-                          : isActive
-                            ? "bg-brand-600 text-white"
-                            : "bg-white text-slate-500 ring-1 ring-slate-200"
-                      }`}
-                    >
-                      {isDone ? "✓" : i + 1}
-                    </span>
-                    <span className="flex-1 text-sm font-medium text-ink">
-                      {s.name}
-                    </span>
-                    <div className="flex flex-wrap gap-1">
-                      {tradeIds.length === 0 ? (
-                        <Pill tone="rose">no work category</Pill>
-                      ) : (
-                        tradeIds.map((tid) => (
-                          <Pill key={tid} tone={subs[tid] ? "green" : "slate"}>
-                            {subs[tid] ? "✓ " : ""}
-                            {tradeName(tid)}
-                          </Pill>
-                        ))
-                      )}
-                    </div>
-                    {isDone ? (
-                      <span className="hidden md:inline text-[11px] text-slate-500">
-                        {(completionsByStage[s.id] ?? []).length} submission(s)
-                      </span>
-                    ) : isActive ? (
-                      <Pill tone="blue">
-                        {filled}/{total} done
-                      </Pill>
-                    ) : (
-                      <span className="text-[11px] text-slate-400">queued</span>
-                    )}
-                  </li>
-                );
-              })}
-            </ol>
-          </div>
+          {/* Step → Tag timeline — this unit's category stages grouped by step */}
+          {(() => {
+            const stepOf = (sid) =>
+              (category?.steps ?? []).find((st) => st.stageIds.includes(sid));
+            const timelineGroups = [];
+            stages.forEach((s) => {
+              const step = stepOf(s.id);
+              const groupKey = step?.id ?? "_unassigned";
+              const last = timelineGroups[timelineGroups.length - 1];
+              if (last && last.key === groupKey) {
+                last.tags.push(s);
+              } else {
+                timelineGroups.push({
+                  key: groupKey,
+                  name: step?.name ?? "Unassigned",
+                  unassigned: !step,
+                  tags: [s],
+                });
+              }
+            });
+            const tagIdx = new Map(stages.map((s, i) => [s.id, i]));
+            const tagsDoneIn = (g) =>
+              g.tags.filter((s) => (tagIdx.get(s.id) ?? -1) < activeIdx)
+                .length;
+            const hasActiveIn = (g) =>
+              g.tags.some((s) => tagIdx.get(s.id) === activeIdx);
+
+            return (
+              <div className="mt-5">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    Step → Tag timeline · {category?.name} category
+                  </span>
+                  <span className="text-[11px] text-slate-400">
+                    {(category?.steps ?? []).length} step
+                    {(category?.steps ?? []).length === 1 ? "" : "s"} ·{" "}
+                    {stages.length} tags
+                  </span>
+                </div>
+                <ol className="space-y-3">
+                  {timelineGroups.map((g, gi) => {
+                    const doneInGroup = tagsDoneIn(g);
+                    const active = hasActiveIn(g);
+                    const fullyDone = doneInGroup === g.tags.length;
+                    const stepTone = g.unassigned
+                      ? "border-amber-300 bg-amber-50/40"
+                      : fullyDone
+                        ? "border-emerald-300 bg-emerald-50/40"
+                        : active
+                          ? "border-brand-300 bg-brand-50/40"
+                          : "border-slate-200 bg-slate-50/60";
+                    return (
+                      <li
+                        key={g.key}
+                        className={`rounded-lg border-2 ${stepTone} p-3`}
+                      >
+                        <div className="mb-2 flex items-center gap-2">
+                          <span
+                            className={`inline-flex h-6 items-center justify-center rounded-full px-2 text-[10px] font-semibold uppercase tracking-wider ${
+                              g.unassigned
+                                ? "bg-amber-100 text-amber-700 ring-1 ring-amber-300"
+                                : "bg-brand-100 text-brand-700 ring-1 ring-brand-300"
+                            }`}
+                          >
+                            {g.unassigned ? g.name : `Step ${gi + 1}`}
+                          </span>
+                          <span className="text-sm font-semibold text-ink">
+                            {g.unassigned ? "" : g.name}
+                          </span>
+                          <span className="ml-auto text-[11px] text-slate-500">
+                            {doneInGroup}/{g.tags.length} tag
+                            {g.tags.length === 1 ? "" : "s"} done
+                          </span>
+                        </div>
+                        <ol className="space-y-1.5">
+                          {g.tags.map((s) => {
+                            const i = tagIdx.get(s.id) ?? -1;
+                            const subs =
+                              progress?.stageSubmissions?.[s.id] ?? {};
+                            const isActive = i === activeIdx;
+                            const isDone = i < activeIdx;
+                            const tradeIds = stageTradeMap[s.id] ?? [];
+                            const total = tradeIds.length || 1;
+                            const filled =
+                              tradeIds.length > 0
+                                ? tradeIds.filter((t) => subs[t]).length
+                                : Object.keys(subs).length;
+                            return (
+                              <li
+                                key={s.id}
+                                className={`flex flex-wrap items-center gap-2 rounded-md border px-3 py-2 ${
+                                  isActive
+                                    ? "border-brand-300 bg-white"
+                                    : isDone
+                                      ? "border-emerald-100 bg-white"
+                                      : "border-slate-100 bg-white"
+                                }`}
+                              >
+                                <span
+                                  className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold ${
+                                    isDone
+                                      ? "bg-emerald-500 text-white"
+                                      : isActive
+                                        ? "bg-brand-600 text-white"
+                                        : "bg-slate-50 text-slate-500 ring-1 ring-slate-200"
+                                  }`}
+                                >
+                                  {isDone ? "✓" : i + 1}
+                                </span>
+                                <span className="flex-1 text-sm font-medium text-ink">
+                                  {s.name}
+                                </span>
+                                <div className="flex flex-wrap gap-1">
+                                  {tradeIds.length === 0 ? (
+                                    <Pill tone="rose">no work category</Pill>
+                                  ) : (
+                                    tradeIds.map((tid) => (
+                                      <Pill
+                                        key={tid}
+                                        tone={subs[tid] ? "green" : "slate"}
+                                      >
+                                        {subs[tid] ? "✓ " : ""}
+                                        {tradeName(tid)}
+                                      </Pill>
+                                    ))
+                                  )}
+                                </div>
+                                {isDone ? (
+                                  <span className="hidden md:inline text-[11px] text-slate-500">
+                                    {(completionsByStage[s.id] ?? []).length}{" "}
+                                    submission(s)
+                                  </span>
+                                ) : isActive ? (
+                                  <Pill tone="blue">
+                                    {filled}/{total} done
+                                  </Pill>
+                                ) : (
+                                  <span className="text-[11px] text-slate-400">
+                                    queued
+                                  </span>
+                                )}
+                              </li>
+                            );
+                          })}
+                        </ol>
+                      </li>
+                    );
+                  })}
+                </ol>
+              </div>
+            );
+          })()}
         </Card>
       )}
 
