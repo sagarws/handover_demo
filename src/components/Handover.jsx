@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useApp } from "../store.jsx";
+import { getOrderedStages } from "../data.js";
 import {
   Card, Button, Select, Pill, EmptyHint, PageHeader, Combobox,
 } from "./ui.jsx";
@@ -29,7 +30,7 @@ export function Handover() {
 
   // Lookups.
   const category = unit ? getCategory(unit.categoryId) : null;
-  const stages = category?.stages ?? [];
+  const stages = getOrderedStages(category);
   const stageTradeMap = category?.stageTradeMap ?? {};
   const trades = category?.trades ?? [];
   const tradeName = (id) => trades.find((t) => t.id === id)?.name ?? "—";

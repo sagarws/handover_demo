@@ -13,11 +13,38 @@ let counter = 0;
 export const uid = (prefix = "id") =>
   `${prefix}_${++counter}_${Date.now().toString(36)}`;
 
+// Canonical tag order for a category: walk steps in declared order, then
+// append any tags that aren't yet attached to a step (orphans). This is the
+// order the Progress Matrix and Handover use for both display and progression.
+export const getOrderedStages = (category) => {
+  if (!category) return [];
+  const stages = category.stages ?? [];
+  const steps = category.steps ?? [];
+  const byId = new Map(stages.map((s) => [s.id, s]));
+  const seen = new Set();
+  const ordered = [];
+  steps.forEach((st) =>
+    (st.stageIds ?? []).forEach((sid) => {
+      const s = byId.get(sid);
+      if (s && !seen.has(sid)) {
+        ordered.push(s);
+        seen.add(sid);
+      }
+    }),
+  );
+  stages.forEach((s) => {
+    if (!seen.has(s.id)) ordered.push(s);
+  });
+  return ordered;
+};
+
 const trade = (name) => ({ id: uid("trd"), name });
 const stage = (name) => ({ id: uid("stg"), name });
 
 // Build a category with its own trades/stages and a stage→trade mapping
 // expressed as { stageIdx: [tradeIdx, …] } so the seed is readable.
+// Each stage is grouped under its own "Step N" by default — users can later
+// merge/split steps and assign tags between them in Configuration.
 const buildCategory = (name, tradeNames, stageNames, mapping = {}) => {
   const trades = tradeNames.map(trade);
   const stages = stageNames.map(stage);
@@ -28,7 +55,12 @@ const buildCategory = (name, tradeNames, stageNames, mapping = {}) => {
       .filter(Boolean);
     stageTradeMap[s.id] = tids;
   });
-  return { id: uid("cat"), name, trades, stages, stageTradeMap };
+  const steps = stages.map((s, i) => ({
+    id: uid("stp"),
+    name: `Step ${i + 1}`,
+    stageIds: [s.id],
+  }));
+  return { id: uid("cat"), name, trades, stages, stageTradeMap, steps };
 };
 
 export const initialCategories = [

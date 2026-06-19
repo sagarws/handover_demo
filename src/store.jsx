@@ -5,6 +5,7 @@ import {
   initialContractors,
   initialSites,
   buildInitialProgress,
+  getOrderedStages,
 } from "./data.js";
 
 const AppContext = createContext(null);
@@ -48,16 +49,30 @@ export function AppProvider({ children }) {
       const newId = uid("cat");
       let stages = [];
       let stageTradeMap = {};
+      let steps = [];
       if (copyFromCategoryId) {
         const src = categories.find((c) => c.id === copyFromCategoryId);
         if (src) {
           // Copy stage names with fresh ids. The new category gets a clean
           // empty stage→trade map because trades are not copied — the new
           // category starts with its own (empty) trade list.
-          stages = src.stages.map((s) => ({ id: uid("stg"), name: s.name }));
+          const stageIdMap = {};
+          stages = src.stages.map((s) => {
+            const fresh = { id: uid("stg"), name: s.name };
+            stageIdMap[s.id] = fresh.id;
+            return fresh;
+          });
           stages.forEach((s) => {
             stageTradeMap[s.id] = [];
           });
+          // Copy step structure mapping old stage ids → new ones.
+          steps = (src.steps ?? []).map((st) => ({
+            id: uid("stp"),
+            name: st.name,
+            stageIds: (st.stageIds ?? [])
+              .map((sid) => stageIdMap[sid])
+              .filter(Boolean),
+          }));
         }
       }
       const newCat = {
@@ -66,6 +81,7 @@ export function AppProvider({ children }) {
         trades: [],
         stages,
         stageTradeMap,
+        steps,
       };
       setCategories((cs) => [...cs, newCat]);
       return newId;
@@ -117,13 +133,15 @@ export function AppProvider({ children }) {
   // ---------- trades (per category) ----------
   const addTrade = useCallback((categoryId, name) => {
     const trimmed = (name || "").trim();
-    if (!trimmed) return;
+    if (!trimmed) return null;
+    const newId = uid("trd");
     setCategories((cs) =>
       updateCategoryIn(cs, categoryId, (c) => ({
         ...c,
-        trades: [...c.trades, { id: uid("trd"), name: trimmed }],
+        trades: [...c.trades, { id: newId, name: trimmed }],
       })),
     );
+    return newId;
   }, []);
   const renameTrade = useCallback((categoryId, tradeId_, name) => {
     setCategories((cs) =>
@@ -156,17 +174,25 @@ export function AppProvider({ children }) {
   }, []);
 
   // ---------- stages (per category) ----------
-  const addStage = useCallback((categoryId, name) => {
+  const addStage = useCallback((categoryId, name, stepId = null) => {
     const trimmed = (name || "").trim();
-    if (!trimmed) return;
+    if (!trimmed) return null;
     const newStage = { id: uid("stg"), name: trimmed };
     setCategories((cs) =>
       updateCategoryIn(cs, categoryId, (c) => ({
         ...c,
         stages: [...c.stages, newStage],
         stageTradeMap: { ...c.stageTradeMap, [newStage.id]: [] },
+        steps: stepId
+          ? (c.steps ?? []).map((st) =>
+              st.id === stepId
+                ? { ...st, stageIds: [...st.stageIds, newStage.id] }
+                : st,
+            )
+          : c.steps ?? [],
       })),
     );
+    return newStage.id;
   }, []);
   const renameStage = useCallback((categoryId, stageId, name) => {
     setCategories((cs) =>
@@ -186,6 +212,10 @@ export function AppProvider({ children }) {
             ...c,
             stages: c.stages.filter((s) => s.id !== stageId),
             stageTradeMap: newMap,
+            steps: (c.steps ?? []).map((st) => ({
+              ...st,
+              stageIds: st.stageIds.filter((sid) => sid !== stageId),
+            })),
           };
         }),
       );
@@ -292,6 +322,211 @@ export function AppProvider({ children }) {
     );
   }, []);
 
+  // ---------- steps (per category) ----------
+  // Steps group tags into ordered buckets. Each stage id can live in at most
+  // one step's stageIds — `addStepStage` enforces that by detaching from any
+  // sibling step first.
+  const addStep = useCallback(
+    (categoryId, { name, stageIds = [], newStageNames = [] }) => {
+      const trimmed = (name || "").trim();
+      if (!trimmed) return null;
+      const newStageEntries = (newStageNames || [])
+        .map((n) => n.trim())
+        .filter(Boolean)
+        .map((n) => ({ id: uid("stg"), name: n }));
+      const newStepId = uid("stp");
+      setCategories((cs) =>
+        updateCategoryIn(cs, categoryId, (c) => {
+          const allowedStageIds = new Set(c.stages.map((s) => s.id));
+          const claimedExisting = (stageIds || []).filter((sid) =>
+            allowedStageIds.has(sid),
+          );
+          const allClaimed = [
+            ...claimedExisting,
+            ...newStageEntries.map((s) => s.id),
+          ];
+          const stages = [...c.stages, ...newStageEntries];
+          const stageTradeMap = { ...c.stageTradeMap };
+          newStageEntries.forEach((s) => {
+            stageTradeMap[s.id] = [];
+          });
+          // Detach claimed stages from other steps so each tag belongs to one.
+          const claimedSet = new Set(claimedExisting);
+          const steps = (c.steps ?? []).map((st) => ({
+            ...st,
+            stageIds: st.stageIds.filter((sid) => !claimedSet.has(sid)),
+          }));
+          steps.push({ id: newStepId, name: trimmed, stageIds: allClaimed });
+          return { ...c, stages, stageTradeMap, steps };
+        }),
+      );
+      return newStepId;
+    },
+    [],
+  );
+  const renameStep = useCallback((categoryId, stepId, name) => {
+    const trimmed = (name || "").trim();
+    if (!trimmed) return;
+    setCategories((cs) =>
+      updateCategoryIn(cs, categoryId, (c) => ({
+        ...c,
+        steps: (c.steps ?? []).map((st) =>
+          st.id === stepId ? { ...st, name: trimmed } : st,
+        ),
+      })),
+    );
+  }, []);
+  const removeStep = useCallback((categoryId, stepId) => {
+    // Removing a step only deletes the grouping — the tags themselves stay
+    // alive (they fall back into the unassigned bucket).
+    setCategories((cs) =>
+      updateCategoryIn(cs, categoryId, (c) => ({
+        ...c,
+        steps: (c.steps ?? []).filter((st) => st.id !== stepId),
+      })),
+    );
+  }, []);
+  const moveStep = useCallback((categoryId, idx, dir) => {
+    setCategories((cs) =>
+      updateCategoryIn(cs, categoryId, (c) => {
+        const steps = (c.steps ?? []).slice();
+        const j = idx + dir;
+        if (j < 0 || j >= steps.length) return c;
+        [steps[idx], steps[j]] = [steps[j], steps[idx]];
+        return { ...c, steps };
+      }),
+    );
+  }, []);
+  const reorderStep = useCallback((categoryId, fromIdx, toIdx) => {
+    if (fromIdx === toIdx) return;
+    setCategories((cs) =>
+      updateCategoryIn(cs, categoryId, (c) => {
+        const steps = (c.steps ?? []).slice();
+        if (
+          fromIdx < 0 || fromIdx >= steps.length ||
+          toIdx < 0 || toIdx >= steps.length
+        ) return c;
+        const [moved] = steps.splice(fromIdx, 1);
+        steps.splice(toIdx, 0, moved);
+        return { ...c, steps };
+      }),
+    );
+  }, []);
+  const addStepStage = useCallback((categoryId, stepId, stageId) => {
+    if (!stepId || !stageId) return;
+    setCategories((cs) =>
+      updateCategoryIn(cs, categoryId, (c) => ({
+        ...c,
+        steps: (c.steps ?? []).map((st) => {
+          if (st.id === stepId) {
+            if (st.stageIds.includes(stageId)) return st;
+            return { ...st, stageIds: [...st.stageIds, stageId] };
+          }
+          // Detach from any other step so a tag belongs to one step at a time.
+          return {
+            ...st,
+            stageIds: st.stageIds.filter((sid) => sid !== stageId),
+          };
+        }),
+      })),
+    );
+  }, []);
+  const removeStepStage = useCallback((categoryId, stepId, stageId) => {
+    setCategories((cs) =>
+      updateCategoryIn(cs, categoryId, (c) => ({
+        ...c,
+        steps: (c.steps ?? []).map((st) =>
+          st.id === stepId
+            ? { ...st, stageIds: st.stageIds.filter((sid) => sid !== stageId) }
+            : st,
+        ),
+      })),
+    );
+  }, []);
+  const reorderStepStage = useCallback(
+    (categoryId, stepId, fromIdx, toIdx) => {
+      if (fromIdx === toIdx) return;
+      setCategories((cs) =>
+        updateCategoryIn(cs, categoryId, (c) => ({
+          ...c,
+          steps: (c.steps ?? []).map((st) => {
+            if (st.id !== stepId) return st;
+            const list = st.stageIds.slice();
+            if (
+              fromIdx < 0 || fromIdx >= list.length ||
+              toIdx < 0 || toIdx >= list.length
+            ) return st;
+            const [moved] = list.splice(fromIdx, 1);
+            list.splice(toIdx, 0, moved);
+            return { ...st, stageIds: list };
+          }),
+        })),
+      );
+    },
+    [],
+  );
+  // Move a tag from any (or no) step into a target step. If `toIdx` is given,
+  // insert at that position; otherwise append.
+  const moveStageToStep = useCallback(
+    (categoryId, stageId, toStepId, toIdx = null) => {
+      if (!toStepId || !stageId) return;
+      setCategories((cs) =>
+        updateCategoryIn(cs, categoryId, (c) => ({
+          ...c,
+          steps: (c.steps ?? []).map((st) => {
+            if (st.id === toStepId) {
+              const cleaned = st.stageIds.filter((sid) => sid !== stageId);
+              const next = cleaned.slice();
+              const safeIdx =
+                toIdx == null || toIdx < 0 || toIdx > next.length
+                  ? next.length
+                  : toIdx;
+              next.splice(safeIdx, 0, stageId);
+              return { ...st, stageIds: next };
+            }
+            return {
+              ...st,
+              stageIds: st.stageIds.filter((sid) => sid !== stageId),
+            };
+          }),
+        })),
+      );
+    },
+    [],
+  );
+  // Move a work category from one tag's link list to another tag's link list.
+  // If `toIdx` is given, insert at that index in the destination; otherwise
+  // append. No-op if the destination already has it.
+  const moveStageTrade = useCallback(
+    (categoryId, fromStageId, toStageId, tradeId_, toIdx = null) => {
+      if (!fromStageId || !toStageId || !tradeId_) return;
+      if (fromStageId === toStageId) return;
+      setCategories((cs) =>
+        updateCategoryIn(cs, categoryId, (c) => {
+          const map = { ...c.stageTradeMap };
+          const fromList = (map[fromStageId] ?? []).filter(
+            (t) => t !== tradeId_,
+          );
+          const existingDst = map[toStageId] ?? [];
+          if (existingDst.includes(tradeId_)) {
+            map[fromStageId] = fromList;
+            return { ...c, stageTradeMap: map };
+          }
+          const dst = existingDst.slice();
+          const safeIdx =
+            toIdx == null || toIdx < 0 || toIdx > dst.length
+              ? dst.length
+              : toIdx;
+          dst.splice(safeIdx, 0, tradeId_);
+          map[fromStageId] = fromList;
+          map[toStageId] = dst;
+          return { ...c, stageTradeMap: map };
+        }),
+      );
+    },
+    [],
+  );
+
   // ---------- contractors ----------
   const addContractor = useCallback((draft) => {
     if (!draft.name?.trim()) return;
@@ -395,9 +630,10 @@ export function AppProvider({ children }) {
       if (!unit) return;
       const cat = getCategory(unit.categoryId);
       if (!cat) return;
+      const orderedStages = getOrderedStages(cat);
       const idx = progress.activeStageIdx;
-      if (idx >= cat.stages.length) return;
-      const currentStage = cat.stages[idx];
+      if (idx >= orderedStages.length) return;
+      const currentStage = orderedStages[idx];
       const required = cat.stageTradeMap[currentStage.id] ?? [];
       if (required.length > 0 && !required.includes(tradeId_)) return;
       const existingSubs = progress.stageSubmissions?.[currentStage.id] ?? {};
@@ -414,7 +650,7 @@ export function AppProvider({ children }) {
           ? required.filter((t) => newSubsForStage[t]).length
           : Object.keys(newSubsForStage).length;
       const stageComplete = filledCount >= slotCount;
-      const nextStage = stageComplete ? cat.stages[idx + 1] : null;
+      const nextStage = stageComplete ? orderedStages[idx + 1] : null;
       const pendingTradeIds = required.filter((t) => !newSubsForStage[t]);
 
       setFlatProgress((fp) => {
@@ -425,7 +661,7 @@ export function AppProvider({ children }) {
           ...fp,
           [unitId]: {
             activeStageIdx: stageComplete
-              ? Math.min(prev.activeStageIdx + 1, cat.stages.length)
+              ? Math.min(prev.activeStageIdx + 1, orderedStages.length)
               : prev.activeStageIdx,
             completions: [
               ...prev.completions,
@@ -473,6 +709,9 @@ export function AppProvider({ children }) {
       addTrade, renameTrade, removeTrade,
       addStage, renameStage, removeStage, moveStage, reorderStage,
       addStageTrade, removeStageTrade, reorderStageTrade,
+      addStep, renameStep, removeStep, moveStep, reorderStep,
+      addStepStage, removeStepStage, reorderStepStage,
+      moveStageToStep, moveStageTrade,
       addContractor, removeContractor,
       addSite, updateSite, removeSite, addUnit, removeUnit,
       addSiteAccess, removeSiteAccess,
@@ -485,6 +724,9 @@ export function AppProvider({ children }) {
       addTrade, renameTrade, removeTrade,
       addStage, renameStage, removeStage, moveStage, reorderStage,
       addStageTrade, removeStageTrade, reorderStageTrade,
+      addStep, renameStep, removeStep, moveStep, reorderStep,
+      addStepStage, removeStepStage, reorderStepStage,
+      moveStageToStep, moveStageTrade,
       addContractor, removeContractor,
       addSite, updateSite, removeSite, addUnit, removeUnit,
       addSiteAccess, removeSiteAccess,

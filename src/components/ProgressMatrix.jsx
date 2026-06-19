@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useApp } from "../store.jsx";
+import { getOrderedStages } from "../data.js";
 import { Card, EmptyHint, Pill, PageHeader, Select } from "./ui.jsx";
 
 const LEGEND = [
@@ -39,7 +40,7 @@ export function ProgressMatrix() {
     let done = 0;
     let active = 0;
     groups.forEach(({ category, units }) => {
-      const stages = category.stages;
+      const stages = getOrderedStages(category);
       units.forEach((f) => {
         const p = flatProgress[f.id];
         if (!p) return;
@@ -135,15 +136,53 @@ export function ProgressMatrix() {
 }
 
 function CategoryMatrix({ category, units, flatProgress }) {
-  const stages = category.stages;
+  const stages = getOrderedStages(category);
   const tradeName = (id) =>
     category.trades.find((t) => t.id === id)?.name ?? "—";
+
+  // Group ordered tag columns by their owning step so we can render a top
+  // header row that spans each step's range. Tags not in a step fall under
+  // an "Unassigned" group at the end.
+  const stepOf = (stageId) =>
+    (category.steps ?? []).find((st) => st.stageIds.includes(stageId));
+  const stepGroups = [];
+  stages.forEach((s) => {
+    const step = stepOf(s.id);
+    const groupKey = step?.id ?? "_unassigned";
+    const last = stepGroups[stepGroups.length - 1];
+    if (last && last.key === groupKey) {
+      last.tags.push(s);
+    } else {
+      stepGroups.push({
+        key: groupKey,
+        name: step?.name ?? "Unassigned",
+        unassigned: !step,
+        tags: [s],
+      });
+    }
+  });
+  // Per-tag position within its step group: drives the colored outer border
+  // (left edge on first tag of group, right edge on last, etc.).
+  const stageGroupInfo = {};
+  stepGroups.forEach((g) => {
+    g.tags.forEach((tag, idx) => {
+      stageGroupInfo[tag.id] = {
+        group: g,
+        isFirst: idx === 0,
+        isLast: idx === g.tags.length - 1,
+      };
+    });
+  });
+  const stepBorder = (g) =>
+    g.unassigned ? "border-amber-400" : "border-brand-400";
 
   return (
     <Card
       title={`${category.name} (${units.length})`}
       right={
         <span className="text-[11px] text-slate-400">
+          {(category.steps ?? []).length} step
+          {(category.steps ?? []).length === 1 ? "" : "s"} ·{" "}
           {stages.length} tags · independent progress per row
         </span>
       }
@@ -160,12 +199,42 @@ function CategoryMatrix({ category, units, flatProgress }) {
                 <th className="sticky left-0 z-10 bg-white px-2 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                   {category.name}
                 </th>
+                {stepGroups.map((g) => (
+                  <th
+                    key={g.key}
+                    colSpan={g.tags.length}
+                    className={`border-x-2 border-t-2 rounded-t-lg px-2 py-2 text-center text-[11px] font-semibold uppercase tracking-wider ${
+                      g.unassigned
+                        ? "border-amber-400 bg-amber-50/40 text-amber-700"
+                        : "border-brand-400 bg-brand-50/40 text-brand-700"
+                    }`}
+                  >
+                    <span
+                      className={`inline-block rounded-md px-2 py-0.5 ${
+                        g.unassigned
+                          ? "bg-amber-100 ring-1 ring-amber-300"
+                          : "bg-brand-100 ring-1 ring-brand-300"
+                      }`}
+                    >
+                      {g.name}
+                    </span>
+                  </th>
+                ))}
+              </tr>
+              <tr>
+                <th className="sticky left-0 z-10 bg-white" />
                 {stages.map((s, i) => {
                   const ids = category.stageTradeMap[s.id] ?? [];
+                  const info = stageGroupInfo[s.id];
+                  const stepCls = stepBorder(info.group);
                   return (
                     <th
                       key={s.id}
-                      className="min-w-[110px] border-x border-t border-slate-200 px-2 py-2 align-top rounded-t-lg"
+                      className={`min-w-[110px] border-t border-slate-200 px-2 py-2 align-top ${
+                        info.isFirst ? `border-l-2 ${stepCls}` : "border-l border-slate-200"
+                      } ${
+                        info.isLast ? `border-r-2 ${stepCls}` : "border-r border-slate-200"
+                      }`}
                     >
                       <div className="flex flex-col items-center gap-1 text-center">
                         <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 text-[10px] font-semibold text-slate-500">
@@ -210,22 +279,34 @@ function CategoryMatrix({ category, units, flatProgress }) {
                         </Pill>
                       )}
                     </td>
-                    {stages.map((s, i) => (
-                      <td
-                        key={s.id}
-                        className={`border-x border-slate-200 p-1 text-center ${
-                          isLast ? "border-b rounded-b-lg" : ""
-                        }`}
-                      >
-                        <Cell
-                          flatProgress={p}
-                          stage={s}
-                          stageIdx={i}
-                          category={category}
-                          unitName={u.name}
-                        />
-                      </td>
-                    ))}
+                    {stages.map((s, i) => {
+                      const info = stageGroupInfo[s.id];
+                      const stepCls = stepBorder(info.group);
+                      return (
+                        <td
+                          key={s.id}
+                          className={`p-1 text-center ${
+                            info.isFirst ? `border-l-2 ${stepCls}` : "border-l border-slate-200"
+                          } ${
+                            info.isLast ? `border-r-2 ${stepCls}` : "border-r border-slate-200"
+                          } ${
+                            isLast
+                              ? `border-b-2 ${stepCls} ${
+                                  info.isFirst ? "rounded-bl-lg" : ""
+                                } ${info.isLast ? "rounded-br-lg" : ""}`
+                              : ""
+                          }`}
+                        >
+                          <Cell
+                            flatProgress={p}
+                            stage={s}
+                            stageIdx={i}
+                            category={category}
+                            unitName={u.name}
+                          />
+                        </td>
+                      );
+                    })}
                   </tr>
                 );
               })}
