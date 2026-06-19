@@ -228,6 +228,42 @@ export function AppProvider({ children }) {
       }),
     );
   }, []);
+  const reorderStage = useCallback((categoryId, fromIdx, toIdx) => {
+    if (fromIdx === toIdx) return;
+    setCategories((cs) =>
+      updateCategoryIn(cs, categoryId, (c) => {
+        if (
+          fromIdx < 0 || fromIdx >= c.stages.length ||
+          toIdx < 0 || toIdx >= c.stages.length
+        ) return c;
+        const copy = c.stages.slice();
+        const [moved] = copy.splice(fromIdx, 1);
+        copy.splice(toIdx, 0, moved);
+        return { ...c, stages: copy };
+      }),
+    );
+  }, []);
+  const reorderStageTrade = useCallback(
+    (categoryId, stageId, fromIdx, toIdx) => {
+      if (fromIdx === toIdx) return;
+      setCategories((cs) =>
+        updateCategoryIn(cs, categoryId, (c) => {
+          const list = (c.stageTradeMap[stageId] ?? []).slice();
+          if (
+            fromIdx < 0 || fromIdx >= list.length ||
+            toIdx < 0 || toIdx >= list.length
+          ) return c;
+          const [moved] = list.splice(fromIdx, 1);
+          list.splice(toIdx, 0, moved);
+          return {
+            ...c,
+            stageTradeMap: { ...c.stageTradeMap, [stageId]: list },
+          };
+        }),
+      );
+    },
+    [],
+  );
   const addStageTrade = useCallback((categoryId, stageId, tradeId_) => {
     if (!tradeId_) return;
     setCategories((cs) =>
@@ -435,8 +471,8 @@ export function AppProvider({ children }) {
       getCategory, getUnit,
       addCategory, renameCategory, removeCategory,
       addTrade, renameTrade, removeTrade,
-      addStage, renameStage, removeStage, moveStage,
-      addStageTrade, removeStageTrade,
+      addStage, renameStage, removeStage, moveStage, reorderStage,
+      addStageTrade, removeStageTrade, reorderStageTrade,
       addContractor, removeContractor,
       addSite, updateSite, removeSite, addUnit, removeUnit,
       addSiteAccess, removeSiteAccess,
@@ -447,8 +483,8 @@ export function AppProvider({ children }) {
       getCategory, getUnit,
       addCategory, renameCategory, removeCategory,
       addTrade, renameTrade, removeTrade,
-      addStage, renameStage, removeStage, moveStage,
-      addStageTrade, removeStageTrade,
+      addStage, renameStage, removeStage, moveStage, reorderStage,
+      addStageTrade, removeStageTrade, reorderStageTrade,
       addContractor, removeContractor,
       addSite, updateSite, removeSite, addUnit, removeUnit,
       addSiteAccess, removeSiteAccess,

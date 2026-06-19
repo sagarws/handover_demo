@@ -286,17 +286,27 @@ function TradesCard({ category }) {
 
 function TagBundleBuilder({ category }) {
   const {
-    addStage, renameStage, removeStage, moveStage,
-    addStageTrade, removeStageTrade,
+    addStage, renameStage, removeStage, moveStage, reorderStage,
+    addStageTrade, removeStageTrade, reorderStageTrade,
   } = useApp();
   const [editingId, setEditingId] = useState(null);
   const [editingName, setEditingName] = useState("");
   const [addingTag, setAddingTag] = useState(false);
   const [newTagName, setNewTagName] = useState("");
   const [addCategoryForTagId, setAddCategoryForTagId] = useState(null);
+  // Drag state: `tag` is the source tag idx being dragged; `wc` is the source
+  // work-category being dragged (tag + idx within that tag). `over` marks the
+  // current drop target index so we can show an insertion highlight.
+  const [drag, setDrag] = useState(null);
+  const [overIdx, setOverIdx] = useState(null);
 
   const tradeName = (id) =>
     category.trades.find((t) => t.id === id)?.name ?? "—";
+
+  const clearDrag = () => {
+    setDrag(null);
+    setOverIdx(null);
+  };
 
   const submitNewTag = () => {
     const name = newTagName.trim();
@@ -322,15 +332,52 @@ function TagBundleBuilder({ category }) {
           category.stages.map((s, i) => {
             const linkedIds = category.stageTradeMap[s.id] ?? [];
             const isEditing = editingId === s.id;
+            const isTagOver =
+              drag?.kind === "tag" &&
+              overIdx?.kind === "tag" &&
+              overIdx.idx === i &&
+              drag.idx !== i;
             return (
               <div
                 key={s.id}
-                className="rounded-lg border-2 border-dashed border-slate-300 bg-slate-50 p-3"
+                onDragOver={(e) => {
+                  if (drag?.kind === "tag") {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "move";
+                    setOverIdx({ kind: "tag", idx: i });
+                  }
+                }}
+                onDragLeave={() =>
+                  setOverIdx((v) =>
+                    v?.kind === "tag" && v.idx === i ? null : v,
+                  )
+                }
+                onDrop={(e) => {
+                  if (drag?.kind === "tag") {
+                    e.preventDefault();
+                    reorderStage(category.id, drag.idx, i);
+                    clearDrag();
+                  }
+                }}
+                className={`rounded-lg border-2 border-dashed bg-slate-50 p-3 transition ${
+                  isTagOver
+                    ? "border-brand-500 ring-2 ring-brand-400/40"
+                    : "border-slate-300"
+                } ${drag?.kind === "tag" && drag.idx === i ? "opacity-50" : ""}`}
               >
                 <div className="flex flex-wrap items-center gap-2">
                   <span
-                    className="cursor-grab text-slate-400 select-none"
-                    title="Drag handle"
+                    draggable
+                    onDragStart={(e) => {
+                      setDrag({ kind: "tag", idx: i });
+                      e.dataTransfer.effectAllowed = "move";
+                      e.dataTransfer.setData("text/plain", `tag:${i}`);
+                      const card = e.currentTarget.closest("div.rounded-lg");
+                      if (card) e.dataTransfer.setDragImage(card, 16, 16);
+                    }}
+                    onDragEnd={clearDrag}
+                    className="cursor-grab text-slate-400 select-none active:cursor-grabbing"
+                    title="Drag to reorder tag"
                   >
                     ⋮⋮
                   </span>
@@ -422,14 +469,69 @@ function TagBundleBuilder({ category }) {
                       No work categories linked yet — add one below.
                     </div>
                   ) : (
-                    linkedIds.map((tid) => (
+                    linkedIds.map((tid, j) => {
+                      const isWcOver =
+                        drag?.kind === "wc" &&
+                        drag.tagId === s.id &&
+                        overIdx?.kind === "wc" &&
+                        overIdx.tagId === s.id &&
+                        overIdx.idx === j &&
+                        drag.idx !== j;
+                      return (
                       <div
                         key={tid}
-                        className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                        onDragOver={(e) => {
+                          if (drag?.kind === "wc" && drag.tagId === s.id) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            e.dataTransfer.dropEffect = "move";
+                            setOverIdx({ kind: "wc", tagId: s.id, idx: j });
+                          }
+                        }}
+                        onDragLeave={() =>
+                          setOverIdx((v) =>
+                            v?.kind === "wc" &&
+                            v.tagId === s.id &&
+                            v.idx === j
+                              ? null
+                              : v,
+                          )
+                        }
+                        onDrop={(e) => {
+                          if (drag?.kind === "wc" && drag.tagId === s.id) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            reorderStageTrade(category.id, s.id, drag.idx, j);
+                            clearDrag();
+                          }
+                        }}
+                        className={`flex items-center gap-2 rounded-md border bg-white px-3 py-2 text-sm transition ${
+                          isWcOver
+                            ? "border-brand-500 ring-2 ring-brand-400/40"
+                            : "border-slate-200"
+                        } ${
+                          drag?.kind === "wc" &&
+                          drag.tagId === s.id &&
+                          drag.idx === j
+                            ? "opacity-50"
+                            : ""
+                        }`}
                       >
                         <span
-                          className="cursor-grab text-slate-300 select-none"
-                          title="Drag handle"
+                          draggable
+                          onDragStart={(e) => {
+                            e.stopPropagation();
+                            setDrag({ kind: "wc", tagId: s.id, idx: j });
+                            e.dataTransfer.effectAllowed = "move";
+                            e.dataTransfer.setData("text/plain", `wc:${j}`);
+                            const row = e.currentTarget.closest(
+                              "div.rounded-md",
+                            );
+                            if (row) e.dataTransfer.setDragImage(row, 12, 12);
+                          }}
+                          onDragEnd={clearDrag}
+                          className="cursor-grab text-slate-300 select-none active:cursor-grabbing"
+                          title="Drag to reorder"
                         >
                           ⋮⋮
                         </span>
@@ -447,7 +549,8 @@ function TagBundleBuilder({ category }) {
                           ✕
                         </button>
                       </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
 
