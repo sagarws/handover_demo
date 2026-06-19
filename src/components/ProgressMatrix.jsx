@@ -154,7 +154,7 @@ function CategoryMatrix({ category, units, flatProgress }) {
         </EmptyHint>
       ) : (
         <div className="scroll-x overflow-x-auto">
-          <table className="w-full min-w-[640px] border-separate border-spacing-0 text-xs">
+          <table className="w-full min-w-[640px] border-separate border-spacing-x-2 border-spacing-y-0 text-xs">
             <thead>
               <tr>
                 <th className="sticky left-0 z-10 bg-white px-2 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
@@ -165,7 +165,7 @@ function CategoryMatrix({ category, units, flatProgress }) {
                   return (
                     <th
                       key={s.id}
-                      className="min-w-[110px] border-b border-slate-100 px-2 py-2 align-top"
+                      className="min-w-[110px] border-x border-t border-slate-200 px-2 py-2 align-top rounded-t-lg"
                     >
                       <div className="flex flex-col items-center gap-1 text-center">
                         <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 text-[10px] font-semibold text-slate-500">
@@ -175,7 +175,7 @@ function CategoryMatrix({ category, units, flatProgress }) {
                           {s.name}
                         </span>
                         {ids.length > 0 && (
-                          <div className="flex flex-wrap justify-center gap-1">
+                          <div className="flex flex-col items-center gap-1">
                             {ids.map((tid) => (
                               <span
                                 key={tid}
@@ -193,12 +193,13 @@ function CategoryMatrix({ category, units, flatProgress }) {
               </tr>
             </thead>
             <tbody>
-              {units.map((u) => {
+              {units.map((u, rowIdx) => {
                 const p = flatProgress[u.id] ?? {
                   activeStageIdx: 0,
                   stageSubmissions: {},
                 };
                 const finished = p.activeStageIdx >= stages.length;
+                const isLast = rowIdx === units.length - 1;
                 return (
                   <tr key={u.id} className="hover:bg-slate-50">
                     <td className="sticky left-0 z-10 bg-white px-2 py-2 text-xs font-semibold text-ink">
@@ -212,7 +213,9 @@ function CategoryMatrix({ category, units, flatProgress }) {
                     {stages.map((s, i) => (
                       <td
                         key={s.id}
-                        className="border-b border-slate-50 p-1 text-center"
+                        className={`border-x border-slate-200 p-1 text-center ${
+                          isLast ? "border-b rounded-b-lg" : ""
+                        }`}
                       >
                         <Cell
                           flatProgress={p}
