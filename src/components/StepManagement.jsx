@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useApp } from "../store.jsx";
 import { Card, Button, Input, EmptyHint, PageHeader, Select, Combobox } from "./ui.jsx";
 
-export function Configuration() {
+export function StepManagement() {
   const { categories } = useApp();
   const [activeCatId, setActiveCatId] = useState(categories[0]?.id ?? null);
 
@@ -19,7 +19,7 @@ export function Configuration() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Configuration"
+        title="Step Management"
         description="Group each category's tags into ordered Steps. Tags and work categories themselves are managed on the Setup tag page."
       />
       <CategoryTabs activeId={activeCatId} onSelect={setActiveCatId} />
@@ -192,7 +192,7 @@ export function CategoryEditor({ category }) {
   );
 }
 
-// Read-only tag list for the Configuration page — shows every tag defined in
+// Read-only tag list for the Step Management page — shows every tag defined in
 // the Setup tag page along with its current step assignment, but no CRUD.
 function TagsReferenceCard({ category }) {
   const stepOf = (sid) =>

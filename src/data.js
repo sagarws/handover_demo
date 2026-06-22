@@ -15,7 +15,7 @@ export const uid = (prefix = "id") =>
 
 // Canonical tag order for a category: walk steps in declared order. Tags
 // that aren't attached to any step are intentionally omitted — they only
-// surface in the Configuration page, never in Progress Matrix / Handover /
+// surface in the Step Management page, never in Progress Matrix / Handover /
 // progression. This is the order both display + progression use.
 export const getOrderedStages = (category) => {
   if (!category) return [];
@@ -41,7 +41,7 @@ const stage = (name) => ({ id: uid("stg"), name });
 
 // Build a category with its own trades/stages and a stage→trade mapping
 // expressed as { stageIdx: [tradeIdx, …] } so the seed is readable.
-// Steps start empty so the user explicitly authors them in Configuration —
+// Steps start empty so the user explicitly authors them in Step Management —
 // every tag is "unassigned" until they group them.
 const buildCategory = (name, tradeNames, stageNames, mapping = {}) => {
   const trades = tradeNames.map(trade);

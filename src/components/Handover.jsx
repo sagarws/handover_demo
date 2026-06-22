@@ -184,7 +184,7 @@ export function Handover() {
           {stages.length === 0 ? (
             <EmptyHint>
               The “{category?.name}” category has no tags — define some in
-              Configuration.
+              Step Management.
             </EmptyHint>
           ) : finished ? (
             <div className="rounded-md bg-emerald-50 px-4 py-6 text-center text-sm text-emerald-700">
@@ -231,7 +231,7 @@ export function Handover() {
                   </div>
                   {requiredTradeIds.length === 0 ? (
                     <Pill tone="rose">
-                      no work category linked — wire one up in Configuration
+                      no work category linked — wire one up in Step Management
                     </Pill>
                   ) : (
                     <ul className="space-y-1.5">

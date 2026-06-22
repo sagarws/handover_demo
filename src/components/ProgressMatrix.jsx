@@ -189,7 +189,7 @@ function CategoryMatrix({ category, units, flatProgress }) {
     >
       {stages.length === 0 ? (
         <EmptyHint>
-          “{category.name}” has no tags — define some in Configuration.
+          “{category.name}” has no tags — define some in Step Management.
         </EmptyHint>
       ) : (
         <div className="scroll-x overflow-x-auto">

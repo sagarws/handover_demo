@@ -64,7 +64,7 @@ export function Contractors() {
           </div>
           {categories.length === 0 ? (
             <EmptyHint>
-              No categories yet — add one in Configuration.
+              No categories yet — add one in Step Management.
             </EmptyHint>
           ) : (
             <div className="space-y-3">

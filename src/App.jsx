@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ProgressMatrix } from "./components/ProgressMatrix.jsx";
 import { Sites } from "./components/Sites.jsx";
 import { Contractors } from "./components/Contractors.jsx";
-import { Configuration } from "./components/Configuration.jsx";
+import { StepManagement } from "./components/StepManagement.jsx";
 import { SetupTag } from "./components/SetupTag.jsx";
 import { Handover } from "./components/Handover.jsx";
 
@@ -11,7 +11,7 @@ const TABS = [
   { id: "handover", label: "Handover", hint: "The demo flow" },
   { id: "sites", label: "Sites", hint: "Sites, flats, access" },
   { id: "contractors", label: "Contractors", hint: "By work category" },
-  { id: "configuration", label: "Configuration", hint: "Tags ↔ steps" },
+  { id: "step-management", label: "Step Management", hint: "Tags ↔ steps" },
   { id: "setup-tag", label: "Setup tag", hint: "Tags ↔ work categories" },
 ];
 
@@ -67,7 +67,7 @@ export default function App() {
           {tab === "handover" && <Handover />}
           {tab === "sites" && <Sites />}
           {tab === "contractors" && <Contractors />}
-          {tab === "configuration" && <Configuration />}
+          {tab === "step-management" && <StepManagement />}
           {tab === "setup-tag" && <SetupTag />}
         </div>
       </main>

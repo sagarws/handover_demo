@@ -5,7 +5,7 @@ import {
   CategoryTabs,
   TradesCard,
   AddWorkCategoryModal,
-} from "./Configuration.jsx";
+} from "./StepManagement.jsx";
 
 export function SetupTag() {
   const { categories } = useApp();
@@ -24,7 +24,7 @@ export function SetupTag() {
     <div className="space-y-5">
       <PageHeader
         title="Setup tag"
-        description="Define each unit category's tags and the work categories required to complete them. Steps are configured on the Configuration page."
+        description="Define each unit category's tags and the work categories required to complete them. Steps are configured on the Step Management page."
       />
       <CategoryTabs activeId={activeCatId} onSelect={setActiveCatId} />
       {activeCat ? (

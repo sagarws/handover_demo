@@ -3,7 +3,7 @@ import { useApp } from "../store.jsx";
 import {
   Card, Button, Input, Pill, EmptyHint, PageHeader, Combobox,
 } from "./ui.jsx";
-import { CategoryEditor } from "./Configuration.jsx";
+import { CategoryEditor } from "./StepManagement.jsx";
 
 export function Sites() {
   const {
@@ -16,7 +16,7 @@ export function Sites() {
     <div className="space-y-5">
       <PageHeader
         title="Sites"
-        description="CRUD for sites and their units. A unit is just a name + category — its tag list comes from the category (set up in Configuration), so flats, corridors and staircases each follow their own progression automatically."
+        description="CRUD for sites and their units. A unit is just a name + category — its tag list comes from the category (set up in Step Management), so flats, corridors and staircases each follow their own progression automatically."
       />
 
       <Card title="Add site">
